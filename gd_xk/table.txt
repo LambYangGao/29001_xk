@@ -1,0 +1,42 @@
+void QDisplayAlarmInfoWidget::fillTable()
+{
+	ui.tableWidget->clearContents();
+	ui.label_TotalRecordCount->setText(QStringLiteral("共找到%1条记录").arg(m_currentRecords.size()));
+	ui.label_TotalPages->setText(QStringLiteral("当前第%1页,共%2页").arg(m_nCurrentPage + 1).arg((m_currentRecords.size() + m_nItemsPerPage - 1) / m_nItemsPerPage));
+	ui.tableWidget->setRowCount(m_nItemsPerPage);
+	ui.tableWidget->setColumnWidth(0, 40);
+	ui.tableWidget->setColumnWidth(1, 110);
+	ui.tableWidget->setIconSize(QSize(100, 100));
+	ui.tableWidget->verticalHeader()->setDefaultSectionSize(70);	//默认行高70
+	ui.tableWidget->setEditTriggers(QAbstractItemView::NoEditTriggers);//设置不允许编辑
+	ui.tableWidget->setColumnWidth(2, 160);
+	ui.tableWidget->setColumnWidth(3, 160);
+	ui.tableWidget->setColumnWidth(4, 360);
+	for (int i = 0; i < m_nItemsPerPage; i++)
+	{
+		int nIdx = m_nCurrentPage * m_nItemsPerPage + i;
+		if (nIdx >= m_currentRecords.size())
+		{
+			break;
+		}
+		ui.tableWidget->setItem(i, 0, new QTableWidgetItem(QString::number(nIdx + 1)));
+		QPixmap piximg;
+		piximg.load(m_currentRecords[nIdx].m_strPicLoc);
+		if (piximg.width()>10 && piximg.height()>10)
+		{
+			piximg.scaled(QSize(100, 100));
+			ui.tableWidget->setItem(i, 1, new QTableWidgetItem(QIcon(piximg), ""));
+
+		}
+	
+		/*ui.tableWidget->setItem(i, 2, new QTableWidgetItem(QStringLiteral("%1-%2-%3 %4：%5：%6").arg(m_currentRecords[nIdx].m_timeHappened.date().year()).
+			arg(m_currentRecords[i].m_timeHappened.date().month()).arg(m_currentRecords[nIdx].m_timeHappened.date().day()).arg(m_currentRecords[i].m_timeHappened.time().hour())
+			.arg(m_currentRecords[i].m_timeHappened.time().minute()).arg(m_currentRecords[nIdx].m_timeHappened.time().second())));*/
+		ui.tableWidget->setItem(i, 2, new QTableWidgetItem(m_currentRecords[nIdx].m_timeHappened.toString("yyyy-MM-dd HH:mm:ss")));
+		ui.tableWidget->setItem(i, 3, new QTableWidgetItem(m_currentRecords[nIdx].m_strEventAddr));
+		ui.tableWidget->setItem(i, 4, new QTableWidgetItem(m_currentRecords[nIdx].m_strDescription));
+		//ui.tableWidget->setText("");	//输入完成后名字清空
+		
+	}
+	//ui.tableWidget->sortItems(0);
+}

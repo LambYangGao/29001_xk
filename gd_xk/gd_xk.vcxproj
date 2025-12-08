@@ -1,0 +1,248 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" ToolsVersion="16.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|Win32">
+      <Configuration>Debug</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|Win32">
+      <Configuration>Release</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <ProjectGuid>{A00BA441-FCA1-4BD8-A6AB-8D1AAB7CDD11}</ProjectGuid>
+    <Keyword>QtVS_v304</Keyword>
+    <QtMsBuild Condition="'$(QtMsBuild)'=='' OR !Exists('$(QtMsBuild)\qt.targets')">$(MSBuildProjectDirectory)\QtMsBuild</QtMsBuild>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+    <ProjectName>gd_xk</ProjectName>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Debug|x64'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <PlatformToolset>v142</PlatformToolset>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Release|x64'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <PlatformToolset>v142</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+  </PropertyGroup>
+  <PropertyGroup Label="Configuration" Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <PlatformToolset>v142</PlatformToolset>
+  </PropertyGroup>
+  <PropertyGroup Label="Configuration" Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <PlatformToolset>v142</PlatformToolset>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Condition="Exists('$(QtMsBuild)\qt_defaults.props')">
+    <Import Project="$(QtMsBuild)\qt_defaults.props" />
+  </ImportGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Debug|x64'" Label="QtSettings">
+    <QtInstall>5.9.3_msvc2017_64</QtInstall>
+    <QtModules>core;sql;network;gui;widgets;serialport;charts</QtModules>
+    <QtBuildConfig>debug</QtBuildConfig>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Release|x64'" Label="QtSettings">
+    <QtInstall>5.9.3_msvc2017_64</QtInstall>
+    <QtModules>core;sql;network;gui;multimedia;widgets;serialport</QtModules>
+    <QtBuildConfig>release</QtBuildConfig>
+  </PropertyGroup>
+  <Target Name="QtMsBuildNotFound" BeforeTargets="CustomBuild;ClCompile" Condition="!Exists('$(QtMsBuild)\qt.targets') or !Exists('$(QtMsBuild)\qt.props')">
+    <Message Importance="High" Text="QtMsBuild: could not locate qt.targets, qt.props; project may not build correctly." />
+  </Target>
+  <ImportGroup Label="ExtensionSettings" />
+  <ImportGroup Label="Shared" />
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)' == 'Debug|x64'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+    <Import Project="$(QtMsBuild)\Qt.props" />
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)' == 'Release|x64'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+    <Import Project="$(QtMsBuild)\Qt.props" />
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Debug|x64'">
+    <IncludePath>..\Depends\include\opencv440\include;F:\software\Qt\5.9.3\msvc2017_64\include;..\Depends\include\ffmpeg;..\Depends\include;..\gd_xk;$(IncludePath)</IncludePath>
+    <LibraryPath>..\Depends\lib;F:\software\Qt\5.9.3\msvc2017_64\lib;..\Depends\lib\SDL2\x64;$(LibraryPath)</LibraryPath>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Release|x64'">
+    <IncludePath>..\Depends\include\ffmpeg;D:\Qt\Qt5.9.3\5.9.3\msvc2017_64\include;..\Depends\include\opencv440\include;..\Depends\include;..\gd_xk;..\Depends\include\libyuv;..\Depends\include\opencv440\include\opencv2;$(IncludePath)</IncludePath>
+    <LibraryPath>D:\Qt\Qt5.9.3\5.9.3\msvc2017_64\lib;..\Depends\lib;..\Depends\lib\SDL2\x64;$(LibraryPath)</LibraryPath>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <IncludePath>..\Depends\include\ffmpeg;D:\Qt\Qt5.9.3\5.9.3\msvc2017_64\include;..\Depends\include\opencv440\include;..\Depends\include;..\gd_xk;$(IncludePath)</IncludePath>
+    <LibraryPath>D:\Qt\Qt5.9.3\5.9.3\msvc2017_64\lib;..\Depends\lib;..\Depends\lib\SDL2\x64;$(LibraryPath)</LibraryPath>
+  </PropertyGroup>
+  <PropertyGroup Label="QtSettings" Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <QtModules>core;sql;network;gui;multimedia;widgets;serialport</QtModules>
+    <QtInstall>5.9.3_msvc2015_64</QtInstall>
+    <QtBuildConfig>release</QtBuildConfig>
+  </PropertyGroup>
+  <PropertyGroup Label="QtSettings" Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <QtModules>core;gui;widgets</QtModules>
+  </PropertyGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <Link>
+      <AdditionalDependencies>SDL2.lib;opencv_world440.lib;avcodec.lib;avformat.lib;avutil.lib;avdevice.lib;avfilter.lib;postproc.lib;swresample.lib;swscale.lib;database88002lib.lib;mycordtranslib.lib;Winmm.lib;yuv.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <StackReserveSize>15000000</StackReserveSize>
+      <StackCommitSize>15000000</StackCommitSize>
+      <OptimizeReferences>
+      </OptimizeReferences>
+      <LinkTimeCodeGeneration>
+      </LinkTimeCodeGeneration>
+    </Link>
+    <ClCompile>
+      <LanguageStandard>stdcpp14</LanguageStandard>
+    </ClCompile>
+    <ClCompile>
+      <LanguageStandard_C>stdc11</LanguageStandard_C>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <WholeProgramOptimization>true</WholeProgramOptimization>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <OpenMPSupport>true</OpenMPSupport>
+      <ConformanceMode>false</ConformanceMode>
+      <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalIncludeDirectories>D:\Qt\Qt5.9.3\5.9.3\msvc2017_64\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ClCompile>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <Link>
+      <AdditionalDependencies>SDL2.lib;opencv_world440.lib;avcodec.lib;avformat.lib;avutil.lib;avdevice.lib;avfilter.lib;postproc.lib;swresample.lib;swscale.lib;database88002.lib;%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)' == 'Debug|x64'" Label="Configuration">
+    <ClCompile>
+      <TreatWChar_tAsBuiltInType>true</TreatWChar_tAsBuiltInType>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+      <Optimization>Disabled</Optimization>
+      <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
+    </ClCompile>
+    <Link>
+      <SubSystem>Windows</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)' == 'Release|x64'" Label="Configuration">
+    <ClCompile>
+      <TreatWChar_tAsBuiltInType>true</TreatWChar_tAsBuiltInType>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+      <Optimization>Disabled</Optimization>
+      <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
+    </ClCompile>
+    <Link>
+      <SubSystem>Console</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClCompile Include="ConfigManager.cpp" />
+    <ClCompile Include="fzqjGetPicSize.cpp" />
+    <ClCompile Include="fzqjIrMore.cpp" />
+    <ClCompile Include="fzqjMain_user.cpp" />
+    <ClCompile Include="fzqjReport.cpp" />
+    <ClCompile Include="fzqjSfMore.cpp" />
+    <ClCompile Include="fzqjSysInfo.cpp" />
+    <ClCompile Include="fzqjViMore.cpp" />
+    <ClCompile Include="h264camera.cpp" />
+    <ClCompile Include="ImageProcessor.cpp" />
+    <ClCompile Include="loginfo.cpp" />
+    <ClCompile Include="myserial.cpp" />
+    <ClCompile Include="PingTest.cpp" />
+    <ClCompile Include="protocol_fk.cpp" />
+    <ClCompile Include="protocol_picxk.cpp" />
+    <ClCompile Include="protocol_yaogan.cpp" />
+    <ClCompile Include="qimageview.cpp" />
+    <ClCompile Include="QSimpleLed.cpp" />
+    <ClCompile Include="ReadConfig.cpp" />
+    <ClCompile Include="serialportForm.cpp" />
+    <ClCompile Include="SF_Stop.cpp" />
+    <ClCompile Include="threadobject.cpp" />
+    <ClCompile Include="UdpSocket.cpp" />
+    <ClCompile Include="main.cpp" />
+    <ClCompile Include="yindao.cpp" />
+    <ClCompile Include="RwriteLabel.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="ConfigManager.h" />
+    <ClInclude Include="cordtranslib.h" />
+    <ClInclude Include="database88002.h" />
+    <ClInclude Include="database88002lib_global.h" />
+    <QtMoc Include="yindao.h" />
+    <QtMoc Include="fzqjSfMore.h" />
+    <QtMoc Include="fzqjViMore.h" />
+    <QtMoc Include="fzqjIrMore.h" />
+    <QtMoc Include="fzqjMain_user.h" />
+    <QtMoc Include="fzqjSysInfo.h" />
+    <QtMoc Include="fzqjReport.h" />
+    <QtMoc Include="h264camera.h" />
+    <QtMoc Include="fzqjGetPicSize.h" />
+    <ClInclude Include="ImageProcessor.h" />
+    <QtMoc Include="QSimpleLed.h" />
+    <QtMoc Include="myserial.h" />
+    <QtMoc Include="PingTest.h" />
+    <ClInclude Include="loginfo.h" />
+    <ClInclude Include="protocol_fk.h" />
+    <ClInclude Include="protocol_picxk.h" />
+    <QtMoc Include="protocol_yaogan.h" />
+    <QtMoc Include="qimageview.h" />
+    <ClInclude Include="ReadConfig.h" />
+    <QtMoc Include="RwriteLabel.h" />
+    <QtMoc Include="serialportForm.h" />
+    <QtMoc Include="SF_Stop.h" />
+    <QtMoc Include="threadobject.h" />
+    <QtMoc Include="UdpSocket.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <Image Include="Resources\AddCamera.ico">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</ExcludedFromBuild>
+    </Image>
+    <Image Include="Resources\Camera.ico">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</ExcludedFromBuild>
+    </Image>
+    <Image Include="Resources\file.ico">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</ExcludedFromBuild>
+    </Image>
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="gd_xk.rc" />
+  </ItemGroup>
+  <ItemGroup>
+    <QtUic Include="fzqjGetPicSize.ui" />
+    <QtUic Include="fzqjIrMore.ui" />
+    <QtUic Include="fzqjMain_user.ui" />
+    <QtUic Include="fzqjReport.ui" />
+    <QtUic Include="fzqjSfMore.ui" />
+    <QtUic Include="fzqjSysInfo.ui" />
+    <QtUic Include="fzqjViMore.ui" />
+    <QtUic Include="serialportForm.ui" />
+  </ItemGroup>
+  <ItemGroup>
+    <QtRcc Include="gd_xk.qrc" />
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Condition="Exists('$(QtMsBuild)\qt.targets')">
+    <Import Project="$(QtMsBuild)\qt.targets" />
+  </ImportGroup>
+  <ImportGroup Label="ExtensionTargets">
+  </ImportGroup>
+</Project>
