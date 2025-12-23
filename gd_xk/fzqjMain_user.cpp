@@ -40,6 +40,8 @@ fzqjMain_user::fzqjMain_user(QWidget* parent)
 	b_is_sf_cbx_init = true;
 	InitSFyzw();
 
+	
+
 	m_socket = new UdpSocket(m_recvPic_port);
 	m_socket->startThread();//开启socket线程
 	connect(m_socket, SIGNAL(sig_hasPendingDatagram(QByteArray)), this, SLOT(OnRecvData(QByteArray)));
@@ -144,12 +146,6 @@ fzqjMain_user::fzqjMain_user(QWidget* parent)
 	ui.label_YG->mColor = QSimpleLed::GREY;
 	ui.label_BG->mColor = QSimpleLed::GREY;
 
-	/*m_database = new Database88002();*/
-	QDateTime st = QDateTime::currentDateTime().addYears(-10);
-	QDateTime ed = QDateTime::currentDateTime();
-	//std::vector<Database88002::targetInfo> targets;
-	//m_database->queryTargets(st, ed, targets);
-
 	QTimer::singleShot(100, this, SLOT(getFramePara()));
 	InitConfigBtn();
 
@@ -160,13 +156,8 @@ fzqjMain_user::fzqjMain_user(QWidget* parent)
 
 fzqjMain_user::~fzqjMain_user(void)
 {
-
-	/*m_database->databaseClose();
-	delete m_database;
-	m_database = nullptr;*/
 	m_logRealTime->stop();
 	m_logSelfCheck->stop();
-
 }
 
 static QTime currecttime;
@@ -886,12 +877,6 @@ void fzqjMain_user::on_btn_SetDevLocation_clicked(void)
 	ShowLineText(0, 0, str);
 }
 
-void fzqjMain_user::target_info_update(void)
-{
-	QString str = QStringLiteral("数据库-目标上报");
-	ShowLineText(0, 0, str);
-}
-
 void fzqjMain_user::on_btn_CountSize_clicked(void)
 {
 	bool Is_Windows_Open = is_windows_open("fzqjGetPicSize");
@@ -1028,7 +1013,6 @@ HEALTH_CTL_MSG fzqjMain_user::getWatchDogMsg(int state)
 	}
 	return message;
 }
-static yindao* m_yindao = nullptr;
 static double last_zkyd_fw = 0;
 void fzqjMain_user::OnRecvFKData(QByteArray data)
 {
@@ -1053,7 +1037,6 @@ void fzqjMain_user::OnRecvFKData(QByteArray data)
 
 			double t_fw, t_fy, t_dis;
 			t_dis = 0;
-			//m_yindao->getTargetInfo(jingdu, weidu, gaodu, t_jingdu, t_weidu, t_gaodu, t_fw, t_fy);
 			m_mycordTrans->targetGps2TargetPolar(weidu, jingdu, gaodu, t_weidu, t_jingdu, t_gaodu, 0, 0, 0, t_dis, t_fw, t_fy);
 			ShowLineText(1, QStringLiteral("指控"), QStringLiteral("FKDOWN_TARGET_GUIDE：目标经度：%1，目标纬度：%2，目标高度：%3，目标距离：%4,引导方位：%5，引导俯仰：%6").arg(t_jingdu, 10, 'f', 6, 0).arg(t_weidu, 10, 'f', 6, 0).arg(t_gaodu, 10, 'f', 6, 0).arg(t_dis, 10, 'f', 6, 0).arg(t_fw, 10, 'f', 3, 0).arg(t_fy, 10, 'f', 3, 0));
 			gudie_dis = t_dis;
@@ -1274,7 +1257,6 @@ void fzqjMain_user::OnTimeOut30000(void)
 
 void fzqjMain_user::OnTimeOut1000(void)
 {
-	//autoFocus();
 	//连续激光测距
 	if (m_bLaserDisStart)
 	{
@@ -1311,7 +1293,6 @@ void fzqjMain_user::OnTimeOut1000(void)
 void fzqjMain_user::OnTimeOut500(void)
 {
 
-	//autoFocus();
 	guideAutoFocus();
 	/*cout << m_pic_up_realtime_state.IRfocuesValue<<"\n";*/
 
@@ -1393,7 +1374,6 @@ void fzqjMain_user::sendReportMsg(XKUpDevStateMsg in_msg)
 		.arg(QString::number((double)((int16_t)in_msg.ztPc) / 10.0))
 		.arg(in_msg.targetDis);
 	ShowLineText(0, QStringLiteral("手动上报"), checkStr);//打印字符串
-	//bool is_report = m_database->insertTargets(QDateTime::currentDateTime(), str_type, (double)in_msg.ztAz / 10.0, (double)((int16_t)in_msg.ztPc) / 10.0);
 	qDebug() << "state:" << in_msg.trackState << "size:" << buffer.size();
 	int a = 1;
 }
@@ -1514,10 +1494,6 @@ void fzqjMain_user::OnRecvData(QByteArray data)
 					oldTrackState = true;
 				}
 				memcpy(&m_pic_up_realtime_state, data, sizeof(PICUpRealTimeStateMsgStruct));
-				if (oldTrackState && !m_pic_up_realtime_state.dsp1_mode && !m_pic_up_realtime_state.dsp2_mode)
-				{
-					isNewTrackTargetInsert = false;
-				}
 				//伺服北向修正：test
 				m_pic_up_realtime_state.fw -= beixiang0shidangqianfangweilinshiyonglaixiuzheng;
 				if (m_pic_up_realtime_state.fw < 0)
@@ -1558,67 +1534,65 @@ void fzqjMain_user::OnRecvData(QByteArray data)
 						}
 					}
 				}
-				//数据库新增记录
-				QString str_type1 = QStringLiteral("无"); 
-				QString str_type2 = QStringLiteral("无");
-				//if ((!isNewTrackTargetInsert) && (m_pic_up_realtime_state.dsp1_mode))
-				{
-					int temp_Type1 = m_pic_up_realtime_state.AI_target_type_VL;//目标类型
-					switch (temp_Type1)
-					{
-					case 0:
-						str_type1 = QStringLiteral("无");
-						break;
-					case 1:
-						str_type1 = QStringLiteral("旋翼无人机");
-						break;
-					case 2:
-						str_type1 = QStringLiteral("固定翼无人机");
-						break;
-					case 3:
-						str_type1 = QStringLiteral("直升机");
-						break;
-					case 4:
-						str_type1 = QStringLiteral("空飘物");//气球
-						break;
-					case 5:
-						str_type1 = QStringLiteral("空飘物");//热气球
-						break;
-					default:
-						break;
-					}
-					//m_database->insertTargets(QDateTime::currentDateTime(), str_type, (float)(m_pic_up_realtime_state.dsp1_target_fw + m_pic_up_realtime_state.fw) / 1000.0, (float)(m_pic_up_realtime_state.dsp1_target_fy + m_pic_up_realtime_state.fy) / 1000.0);
-					//isNewTrackTargetInsert = true;
-				}
-				//else if (!isNewTrackTargetInsert && m_pic_up_realtime_state.dsp2_mode)
-				{
-					int temp_Type2 = m_pic_up_realtime_state.AI_target_type_IR;//目标类型
-					switch (temp_Type2)
-					{
-					case 0:
-						str_type2 = QStringLiteral("无");
-						break;
-					case 1:
-						str_type2 = QStringLiteral("旋翼无人机");
-						break;
-					case 2:
-						str_type2 = QStringLiteral("固定翼无人机");
-						break;
-					case 3:
-						str_type2 = QStringLiteral("直升机");
-						break;
-					case 4:
-						str_type2 = QStringLiteral("空飘物");//气球
-						break;
-					case 5:
-						str_type2 = QStringLiteral("空飘物");//热气球
-						break;
-					default:
-						break;
-					}
-					//m_database->insertTargets(QDateTime::currentDateTime(), str_type, (float)(m_pic_up_realtime_state.dsp2_target_fw + m_pic_up_realtime_state.fw) / 1000.0, (float)(m_pic_up_realtime_state.dsp2_target_fy + m_pic_up_realtime_state.fy) / 1000.0);
-					//isNewTrackTargetInsert = true;
-				}
+				
+                //新增记录
+                QString str_type1 = QStringLiteral("无");
+                QString str_type2 = QStringLiteral("无");
+                //if ((!isNewTrackTargetInsert) && (m_pic_up_realtime_state.dsp1_mode))
+                {
+                    int temp_Type1 = m_pic_up_realtime_state.AI_target_type_VL;//目标类型
+                    switch (temp_Type1)
+                    {
+                    case 0:
+                        str_type1 = QStringLiteral("无");
+                        break;
+                    case 1:
+                        str_type1 = QStringLiteral("旋翼无人机");
+                        break;
+                    case 2:
+                        str_type1 = QStringLiteral("固定翼无人机");
+                        break;
+                    case 3:
+                        str_type1 = QStringLiteral("直升机");
+                        break;
+                    case 4:
+                        str_type1 = QStringLiteral("空飘物");//气球
+                        break;
+                    case 5:
+                        str_type1 = QStringLiteral("空飘物");//热气球
+                        break;
+                    default:
+                        break;
+                    }
+                }
+                //else if (!isNewTrackTargetInsert && m_pic_up_realtime_state.dsp2_mode)
+                {
+                    int temp_Type2 = m_pic_up_realtime_state.AI_target_type_IR;//目标类型
+                    switch (temp_Type2)
+                    {
+                    case 0:
+                        str_type2 = QStringLiteral("无");
+                        break;
+                    case 1:
+                        str_type2 = QStringLiteral("旋翼无人机");
+                        break;
+                    case 2:
+                        str_type2 = QStringLiteral("固定翼无人机");
+                        break;
+                    case 3:
+                        str_type2 = QStringLiteral("直升机");
+                        break;
+                    case 4:
+                        str_type2 = QStringLiteral("空飘物");//气球
+                        break;
+                    case 5:
+                        str_type2 = QStringLiteral("空飘物");//热气球
+                        break;
+                    default:
+                        break;
+                    }
+                }
+				
 				//日志
 				if (m_bSaveRealTimeMsg)
 				{
@@ -2780,27 +2754,6 @@ void fzqjMain_user::on_StateEvent(bool state)
 }
 
 
-void fzqjMain_user::on_btn_DataBase_clicked(void)
-{
-	QString str = QStringLiteral("数据库管理-打开");
-	ShowLineText(0, 0, str);
-	bool Is_Windows_Open = is_windows_open("databaseManager");
-	if (Is_Windows_Open == false)
-	{
-		return;
-	}
-	else
-	{
-		//打开数据库管理界面
-		//databaseManager* dbm = new databaseManager(m_database);
-		////dbm->setWindowModality();
-		//connect(dbm, SIGNAL(sig_target_info()), this, SLOT(target_info_update()));
-		//dbm->setAttribute(Qt::WA_DeleteOnClose, true);
-		//dbm->show();
-	}
-}
-
-
 
 void fzqjMain_user::on_btn_stop_dis_2_clicked(void)
 {
@@ -3936,89 +3889,6 @@ float fzqjMain_user::calculateNewFocalLength(float currentFocalLength, int curre
 	return currentFocalLength * static_cast<float>(desiredPixelCount) / currentPixelCount;
 }
 
-void fzqjMain_user::autoFocus(void)
-{
-	//if (is_main_camera == 0)
-	//{
-
-	//	
-	//	if (m_pic_up_realtime_state.dsp1_mode)
-	//	{
-
-	//		if (m_pic_up_realtime_state.ai_vi_size == 0)
-	//		{
-	//			return;
-	//		}
-	//		int currentzoom_vi_ = m_pic_up_realtime_state.VIfocuesValue;
-	//		float maybezoom_vi_f = calculateNewFocalLength(currentzoom_vi_, m_pic_up_realtime_state.ai_vi_size, m_xk_configinfo.ADPAT_VIEW_PIXE_VI);
-	//		int maybezoom_vi_i = (int)maybezoom_vi_f;
-	//		int nums = maybezoom_vi_i - currentzoom_vi_;
-	//		/*cout << "maybezoom_vi_f:" << maybezoom_vi_f << "currentzoom_vi_:" << currentzoom_vi_ << "nums:\n" << nums << "\n";
-	//		cout << "m_pic_up_realtime_state.ai_vi_size:" << m_pic_up_realtime_state.ai_vi_size;*/
-	//		cout << nums<<"\n";
-	//		if (nums > 4000)
-	//		{
-	//			//cout << "small";
-	//			/*on_btn_vl_v_nadd_pressed();*/
-	//			on_btn_vl_v_add_pressed();
-	//			av_usleep(250000);
-	//			m_xk_down_msg.msg_type = E_FK_VL_STOP_ZOOM;
-	//			sendMsg2Pic();
-	//			m_xk_down_msg.msg_type = E_FK_BUTT;
-
-	//		}
-	//		else if (nums < -4000)
-	//		{
-	//			//cout << "big";
-	//			on_btn_vl_v_nadd_pressed();
-	//			av_usleep(250000);
-	//			m_xk_down_msg.msg_type = E_FK_VL_STOP_ZOOM;
-	//			sendMsg2Pic();
-	//			m_xk_down_msg.msg_type = E_FK_BUTT;
-	//			/*on_btn_vl_v_add_pressed();*/
-	//		}
-	//	}
-	//}
-	//else
-	//{
-	//	if (m_pic_up_realtime_state.ai_ir_size == 0)
-	//	{
-
-	//		return;
-	//	}
-	//	if (m_pic_up_realtime_state.dsp2_mode)
-	//	{
-	//		int currentzoom_ir_ = m_pic_up_realtime_state.IRfocuesValue;
-	//		float maybezoom_ir_f = calculateNewFocalLength(currentzoom_ir_, m_pic_up_realtime_state.ai_ir_size, m_xk_configinfo.ADPAT_VIEW_PIXE_IR);
-	//		int maybezoom_ir_i = (int)maybezoom_ir_f;
-	//		int nums = maybezoom_ir_i - currentzoom_ir_;
-	//	/*	cout << "maybezoom_vi_f:" << maybezoom_ir_f << "currentzoom_vi_:" << currentzoom_vi_ << "nums:\n" << nums << "\n";
-	//		cout << "m_pic_up_realtime_state.ai_vi_size:" << m_pic_up_realtime_state.ai_vi_size;*/
-	//		if (nums > 3000)
-	//		{
-	//			//cout << "small";
-	//			/*on_btn_vl_v_nadd_pressed();*/
-	//			on_btn_ir_v_add_pressed();
-	//			av_usleep(300000);
-	//			m_xk_down_msg.msg_type = E_FK_IR_STOP_ZOOM;
-	//			sendMsg2Pic();
-	//			m_xk_down_msg.msg_type = E_FK_BUTT;
-
-	//		}
-	//		else if (nums < -3000)
-	//		{
-	//			//cout << "big";
-	//			on_btn_ir_v_nadd_pressed();
-	//			av_usleep(300000);
-	//			m_xk_down_msg.msg_type = E_FK_IR_STOP_ZOOM;
-	//			sendMsg2Pic();
-	//			m_xk_down_msg.msg_type = E_FK_BUTT;
-	//			/*on_btn_vl_v_add_pressed();*/
-
-	//		}
-	//	}
-	//}
-}
 
 void fzqjMain_user::guideAutoFocus(void)
 {

@@ -1,5 +1,4 @@
 #pragma once
-
 #include <QWidget>
 #include "ui_fzqjMain_user.h"
 #include "h264camera.h"
@@ -7,7 +6,6 @@
 #include "protocol_fk.h"
 #include <UdpSocket.h>
 #include "myserial.h"
-#include "yindao.h"
 #include "cordtranslib.h"
 #include <qmediaplayer.h>
 #include <qmediacontent.h>
@@ -21,7 +19,7 @@
 #include"fzqjGetPicSize.h"
 #include"loginfo.h"
 #include<qmovie.h>
-//#include"RwriteLabel.h"
+
 
 
 class fzqjMain_user : public QWidget
@@ -32,12 +30,6 @@ public:
 	fzqjMain_user(QWidget* parent = Q_NULLPTR);
 	~fzqjMain_user(void);
 
-	//视频源
-
-	//CRTSPSource* m_rtsp_camera = nullptr;
-	//CRTSPSource* m_rtsp_cameraR = nullptr;
-	//CFileImageStream* m_videofile_VL = nullptr;//视频文件
-	//CFileImageStream* m_videofile_IR = nullptr;//红外视频文件
 	bool bRecording_VI = false;
 	bool bRecording_IR = false;
 
@@ -48,7 +40,6 @@ public:
 	bool m_bSaveSelfCheckMsg = true;
 
 	//配置文件
-	//CReadConfig* m_configManager;
 	ConfigManager* m_configManager;
 	XKConfigInfo m_xk_configinfo;
 	GDConfigInfo m_gd_configinfo;
@@ -123,10 +114,7 @@ private:
 	protocol_yaogan* m_yaogan;
 	bool b_yaogan_mainCamera = false;//false 可见光 true 红外
 
-	//数据库
-	/*Database88002* m_database = nullptr;*/
 	int target_manul_type = 0;//手动设置目标类型；0不设置，采信ai上报结果；不为0，按手动设置结果
-	bool isNewTrackTargetInsert = false;//发现新的目标后，添加进目标数据库
 
 	//本机经纬高
 	double jingdu, weidu, gaodu;
@@ -190,7 +178,6 @@ public:
 	bool is_windows_open(QString str_windows);
 
 	float calculateNewFocalLength(float currentFocalLength, int currentPixelCount, int desiredPixelCount);
-	void autoFocus(void);
 	void guideAutoFocus(void);
 	void calculateDeltaAngles(
 		double u_d, double v_d, // 鼠标点击位置在显示框中的坐标
@@ -226,9 +213,6 @@ public:
 
 
 signals:
-	//void sig_radar_Gradient(FKUp2GradientMsgStruct msg);
-	//void sig_radar_Visual(FKUp2VisualMsgStruct msg);
-	//void sig_radar_Overlap(FKUp2OverlapMsgStruct msg);
 	void sigUpdateSendBjFwFy(int fw, int fy);
 	void sig_RefreshGDConfig(GDConfigInfo m_gd_configinfo);
 	void Sig_VI_Record_Start(QString filename);
@@ -524,19 +508,11 @@ protected slots:
 	void on_StateEvent(bool state);//摇杆在线状态
 #pragma endregion
 
-#pragma region 数据库
-	void on_btn_DataBase_clicked(void);
-	//目标类型
-	//void on_btn_setAItargetType_clicked();
-
-	void on_btn_SetDevLocation_clicked(void);
-	void target_info_update(void);
-#pragma endregion
-
 #pragma region 计算面积
 	void on_btn_CountSize_clicked(void);
 #pragma endregion
 
+    void on_btn_SetDevLocation_clicked(void);
 
 };
 

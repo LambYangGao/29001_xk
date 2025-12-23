@@ -16,13 +16,7 @@ int main(int argc, char* argv[])
 	qApp->setStyleSheet(styleSheet);
 	file.close();
 
-	//login logregdlg;
-	//logregdlg.exec();
 	fzqjMain_user w;
-	//fzqjMain w;
-	//fzqjMain_test w;
-	//fzqjReplay w;
-	//yltdMain w;
 	w.show();
 	return a.exec();
 }
