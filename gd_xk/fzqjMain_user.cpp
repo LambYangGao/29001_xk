@@ -794,11 +794,6 @@ void fzqjMain_user::sendMsg2Pic(XKDownMsg xk_down_msg)
 	m_socket->SendDatagram(buffer, QHostAddress(m_PicIP), m_sendPic_port);
 }
 
-void fzqjMain_user::RefreshGDConfig(void)
-{
-	//
-}
-
 void fzqjMain_user::InitSFyzw(void)
 {
 	ui.cbx_sf_yzw_num->clear();
@@ -1285,8 +1280,7 @@ void fzqjMain_user::OnTimeOut100(void)
 		//if (ui.lb_sf_state->text() == QStringLiteral("伺服停止"))
 		if ((int)m_pic_up_realtime_state.mode == 64)
 		{
-			m_timer20->stop();
-			m_xk_down_msg.msg_type == E_FK_BUTT;
+			m_xk_down_msg.msg_type = E_FK_BUTT;
 		}
 	}
 }
@@ -2756,13 +2750,6 @@ void fzqjMain_user::on_btn_ir_v_nadd_mini_clicked(void)
 	m_xk_down_msg.msg_type = E_FK_BUTT;
 }
 
-void fzqjMain_user::on_btn_sf_manual_clicked(void)
-{
-	int xspeed = ui.Slider_speedx->value();
-	int yspeed = ui.Slider_speedy->value();
-	sendMsg2Pic();
-}
-
 void fzqjMain_user::on_Slider_speedx_valueChanged(int value)
 {
 	ui.label_speedx_2->setText(QString::number((double)value / 100, 'f', 2));
@@ -3614,18 +3601,6 @@ void fzqjMain_user::on_btn_sf_fwauto_clicked(void)
 	m_xk_down_msg.param_2 = 10000;
 	m_xk_down_msg.param_3 = 0;
 	m_xk_down_msg.param_4 = 1000;
-	sendMsg2Pic();
-	m_xk_down_msg.msg_type = E_FK_BUTT;
-}
-
-void fzqjMain_user::on_btn_sf_fymanul_clicked(void)
-{
-	if (m_pic_up_realtime_state.dsp1_mode || m_pic_up_realtime_state.dsp2_mode)
-	{
-		qDebug() << QStringLiteral("伺服在跟踪状态！误操作");
-		return;
-	}
-	m_xk_down_msg.msg_type = E_FK_SF_FYMANUL;
 	sendMsg2Pic();
 	m_xk_down_msg.msg_type = E_FK_BUTT;
 }

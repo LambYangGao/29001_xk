@@ -12,7 +12,6 @@
 #include <QWindow>
 #include "ConfigManager.h"
 #include "PingTest.h"
-#include <SF_Stop.h>
 #include <opencv2/opencv.hpp>
 #include"fzqjGetPicSize.h"
 #include"loginfo.h"
@@ -163,7 +162,6 @@ public:
 	QString bool_to_StateInfo(bool in_bool);//状态信息变成中文字符
 	QString int8C_to_StateInfo(int8_t in_state);
 	QString int8C_to_OpenorClose(int8_t in_state);
-	QTimer* m_timer20 = nullptr;//更新定时器
 	QTimer* m_timer30000 = nullptr;
 
 	bool is_windows_open(QString str_windows);
@@ -215,7 +213,6 @@ private:
 	void UpdateRealTimeState(void);//接收图像板数据后，更新实时状态数据
 	void UpdateSelfCheckState(void);//接收图像板数据后，更新自检信息
 	void UpdateFKDevState(void);//接收图像板数据后，更新待发送防控目标数据
-	void RefreshGDConfig(void);//刷新图像板配置参数
 	void InitSFyzw(void);
 	void SetBtnHighLight(QWidget* btn, bool flag);//设置按钮高亮
 	void SetMainCamera(bool flag);//false 可见光 true 红外
@@ -406,8 +403,6 @@ protected slots:
 	void on_btn_sf_exit_track_2_clicked(void);
 	void on_btn_sf_guizhong_clicked(void);//归中
 	void on_btn_sf_shoucang_clicked(void);//收藏
-	void on_btn_sf_manual_clicked(void);//手动搜索---作废
-	void on_btn_sf_fymanul_clicked(void);//手动俯仰---作废
 	void on_btn_sf_more_clicked(void);//更多设置
 	void sf_biaojiao_X(void);
 	void sf_biaojiao_Y(void);
