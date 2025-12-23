@@ -1,6 +1,0 @@
-<RCC>
-    <qresource prefix="/gd_xk">
-        <file>Resources/背景1.png</file>
-        <file>Resources/AddCamera.ico</file>
-    </qresource>
-</RCC>

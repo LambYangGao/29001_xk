@@ -5,7 +5,6 @@
 #include "protocol_picxk.h"
 #include "protocol_fk.h"
 #include <UdpSocket.h>
-#include "myserial.h"
 #include "cordtranslib.h"
 #include <qmediaplayer.h>
 #include <qmediacontent.h>
@@ -13,7 +12,6 @@
 #include <QWindow>
 #include "ConfigManager.h"
 #include "PingTest.h"
-#include "protocol_yaogan.h"
 #include <SF_Stop.h>
 #include <opencv2/opencv.hpp>
 #include"fzqjGetPicSize.h"
@@ -106,14 +104,7 @@ private:
 
 	QTimer* m_timer500 = nullptr;
 
-	//摇杆
-	MySerial* m_serialport = nullptr;
-	bool m_serial_isOpen = false;
-	bool m_yaogan_isOpen = false;
-
-	protocol_yaogan* m_yaogan;
-	bool b_yaogan_mainCamera = false;//false 可见光 true 红外
-
+	bool b_yaogan_mainCamera = false; // false 可见光 true 红外
 	int target_manul_type = 0;//手动设置目标类型；0不设置，采信ai上报结果；不为0，按手动设置结果
 
 	//本机经纬高
@@ -277,9 +268,7 @@ protected slots:
 	void OncloseToolBtn(void);
 	void OnmaximizeToolBtn(void);
 	void OnminimizeToolBtn(void);
-	void OnImageViewResizeL(void);
 	void OnImageViewResizeL(int a, int b);
-	void OnImageViewResizeR(void);
 
 	void on_btn_clear_recvText_clicked(void);
 	void on_btn_Lidar_YinDao_Focus_clicked(void);
@@ -314,8 +303,6 @@ protected slots:
 	void btn_vl_write_target(void);
 	void vl_display_mode_heibai(void);//黑白
 	void vl_display_mode_caise(void);//彩色
-	void on_btn_vl_dehaze_open(void);//透雾开
-	//void on_btn_vl_dehaze_close();//透雾关
 
 	void on_btn_vl_more_clicked(void);//专家设置
 	void vi_focuse_auto(void);//自动调焦
@@ -487,25 +474,9 @@ protected slots:
 	void on_btn_save_realtimeMsg_clicked(void);//保存实时报文
 	void on_btn_save_selfCheckMsg_clicked(void);//保存自检报文
 
-	//rtsp
-	void on_btn_vi_video_refresh_clicked(void);
-	void on_btn_ir_video_refresh_clicked(void);
-
 	//雷达引导
 	void on_btn_devState_Lidar_clicked(void);
 	void on_btn_manual_target_send_clicked(void);
-#pragma endregion
-
-#pragma region 摇杆
-	//小摇杆-串口
-	void on_btn_serialport_clicked(void);
-	void on_btn_openSerialPort_clicked(void);
-	void OnRecvSerialInfo(QByteArray buf);
-	//大摇杆-HID
-	void on_PosEvent(JoyPosInfoMsg info);//转台移动
-	void on_BtnEvent(JoyBtnInfoMsg info);//按钮事件
-	void on_PovEvent(bool state);//方位移动
-	void on_StateEvent(bool state);//摇杆在线状态
 #pragma endregion
 
 #pragma region 计算面积

@@ -1,4 +1,5 @@
 #include "fzqjMain_user.h"
+#include <Windows.h>
 #include "QSimpleLed.h"
 #include <QMessageBox>
 #include <QDir>
@@ -7,7 +8,6 @@
 #include <fzqjSfMore.h>
 #include <fzqjViMore.h>
 #include <fzqjIrMore.h>
-#include <serialportForm.h>
 #include <QMediaPlaylist>
 #include <regex>
 #include "fzqjSysInfo.h"
@@ -113,25 +113,6 @@ fzqjMain_user::fzqjMain_user(QWidget* parent)
 	pingFk->start();
 	pingPic->start();
 
-	//串口-小摇杆
-	m_serialport = new MySerial();
-	QStringList portnamelist = m_serialport->ScanSerialPorts();
-	QString portname;
-	for each (QString port in portnamelist)
-	{
-		portname = port;
-	}
-	m_serialport->setInfo(portname, 19200, 0, 8, 1);
-	connect(m_serialport, SIGNAL(sig_hasPendingDatagram(QByteArray)), this, SLOT(OnRecvSerialInfo(QByteArray)));
-	//HID-大遥杆
-	m_yaogan = new protocol_yaogan();
-	connect(m_yaogan, SIGNAL(sig_PosEvent(JoyPosInfoMsg)), this, SLOT(on_PosEvent(JoyPosInfoMsg)));
-	connect(m_yaogan, SIGNAL(sig_BtnEvent(JoyBtnInfoMsg)), this, SLOT(on_BtnEvent(JoyBtnInfoMsg)));
-	connect(m_yaogan, SIGNAL(sig_PovEvent(bool)), this, SLOT(on_PovEvent(bool)));
-	connect(m_yaogan, SIGNAL(sig_SateEvent(bool)), this, SLOT(on_StateEvent(bool)));
-	m_yaogan->start();
-	/*m_yaogan->test_getJoyInfo();*/
-
 	//开机自检
 	//on_btn_selfCheck_clicked();
 
@@ -143,7 +124,6 @@ fzqjMain_user::fzqjMain_user(QWidget* parent)
 	ui.label_SJK->mColor = QSimpleLed::GREY;
 	ui.label_cj->mColor = QSimpleLed::GREY;
 	ui.label_sf->mColor = QSimpleLed::GREY;
-	ui.label_YG->mColor = QSimpleLed::GREY;
 	ui.label_BG->mColor = QSimpleLed::GREY;
 
 	QTimer::singleShot(100, this, SLOT(getFramePara()));
@@ -629,16 +609,6 @@ void fzqjMain_user::UpdateSelfCheckState(void)
 	else
 	{
 		//
-	}
-	if (m_serial_isOpen || m_yaogan_isOpen)
-	{
-		ui.label_YG->setStates(QSimpleLed::ON);
-		ui.label_YG->mColor = QSimpleLed::GREEN;
-	}
-	else
-	{
-		ui.label_YG->setStates(QSimpleLed::OFF);
-		ui.label_YG->mColor = QSimpleLed::GREY;
 	}
 }
 
@@ -1375,7 +1345,6 @@ void fzqjMain_user::sendReportMsg(XKUpDevStateMsg in_msg)
 		.arg(in_msg.targetDis);
 	ShowLineText(0, QStringLiteral("手动上报"), checkStr);//打印字符串
 	qDebug() << "state:" << in_msg.trackState << "size:" << buffer.size();
-	int a = 1;
 }
 
 void fzqjMain_user::pingFkRes(bool res)
@@ -1442,7 +1411,7 @@ void fzqjMain_user::OnRecvData(QByteArray data)
 				if (bPrintSelfCheckTime)
 				{
 					bPrintSelfCheckTime = false;
-					QString checkStr = QStringLiteral("可见光:%1,红外:%2,测距机:%3,伺服:%4,AI检测器:%5,DSP跟踪器:%6,摇杆:%7,温度1:%8,温度2:%9,湿度:%10,气压:%11")
+					QString checkStr = QStringLiteral("可见光:%1,红外:%2,测距机:%3,伺服:%4,AI检测器:%5,DSP跟踪器:%6,温度1:%7,温度2:%8,湿度:%9,气压:%10")
 						.arg(int8C_to_OpenorClose(m_pic_up_selfcheck_state.ccdState))
 						.arg(int8C_to_OpenorClose(m_pic_up_selfcheck_state.irState))
 						.arg(int8C_to_OpenorClose(m_pic_up_selfcheck_state.distanceState))
@@ -1450,7 +1419,6 @@ void fzqjMain_user::OnRecvData(QByteArray data)
 						.arg(int8C_to_OpenorClose(m_pic_up_selfcheck_state.detectorState))
 						.arg(int8C_to_OpenorClose(m_pic_up_selfcheck_state.traceState))
 						.arg(int8C_to_StateInfo(1))
-						.arg(int8C_to_OpenorClose(m_yaogan_isOpen))
 						.arg(m_pic_up_selfcheck_state.boardtemp1)
 						.arg(m_pic_up_selfcheck_state.boardtemp2)
 						.arg(m_pic_up_selfcheck_state.boardHumidity)
@@ -1461,7 +1429,7 @@ void fzqjMain_user::OnRecvData(QByteArray data)
 					{
 						m_logSelfCheck->writeLog
 						(
-							QStringLiteral("可见光:%1,红外:%2,测距机:%3,伺服:%4,AI检测器:%5,DSP跟踪器:%6,数据库:%7,摇杆:%8,温度1:%9,温度2:%10,湿度:%11,气压:%12,")
+							QStringLiteral("可见光:%1,红外:%2,测距机:%3,伺服:%4,AI检测器:%5,DSP跟踪器:%6,数据库:%7,温度1:%8,温度2:%9,湿度:%10,气压:%11,")
 							.arg(int8C_to_OpenorClose(m_pic_up_selfcheck_state.ccdState))
 							.arg(int8C_to_OpenorClose(m_pic_up_selfcheck_state.irState))
 							.arg(int8C_to_OpenorClose(m_pic_up_selfcheck_state.distanceState))
@@ -1469,7 +1437,6 @@ void fzqjMain_user::OnRecvData(QByteArray data)
 							.arg(int8C_to_OpenorClose(m_pic_up_selfcheck_state.detectorState))
 							.arg(int8C_to_OpenorClose(m_pic_up_selfcheck_state.traceState))
 							.arg(int8C_to_StateInfo(1))
-							.arg(int8C_to_OpenorClose(m_yaogan_isOpen))
 							.arg(m_pic_up_selfcheck_state.boardtemp1)
 							.arg(m_pic_up_selfcheck_state.boardtemp2)
 							.arg(m_pic_up_selfcheck_state.boardHumidity)
@@ -2074,11 +2041,6 @@ void fzqjMain_user::OnminimizeToolBtn(void)
 	showMinimized();
 }
 
-void fzqjMain_user::OnImageViewResizeL(void)
-{
-	//
-}
-
 void fzqjMain_user::OnImageViewResizeL(int a, int b)
 {
 	if ((float)ui.groupBox->height() / (float)ui.groupBox->width() > picLeftPraH / picLeftPraW)
@@ -2092,11 +2054,6 @@ void fzqjMain_user::OnImageViewResizeL(int a, int b)
 		ui.label_videodisplay_vl->setMinimumWidth(ui.label_videodisplay_vl->height() / picLeftPraH / picLeftPraW);
 	}
 	// showFullScreen();
-}
-
-void fzqjMain_user::OnImageViewResizeR(void)
-{
-	//
 }
 
 void fzqjMain_user::on_btn_clear_recvText_clicked(void)
@@ -2155,15 +2112,6 @@ void fzqjMain_user::on_btn_open_dis_clicked(void)
 	ui.btn_start_more_dis->setEnabled(true);
 }
 
-void fzqjMain_user::on_btn_vi_video_refresh_clicked(void)
-{
-	//
-}
-
-void fzqjMain_user::on_btn_ir_video_refresh_clicked(void)
-{
-	//
-}
 
 void fzqjMain_user::on_btn_devState_Lidar_clicked(void)
 {
@@ -2267,494 +2215,6 @@ void fzqjMain_user::on_btn_manual_target_send_clicked(void)
 	}
 }
 
-void fzqjMain_user::on_btn_serialport_clicked(void)
-{
-	bool Is_Windows_Open = is_windows_open("serialportForm");
-	QString str = QStringLiteral("系统控制-摇杆-串口参数");
-	ShowLineText(0, 0, str);
-	if (Is_Windows_Open == false)
-	{
-		return;
-	}
-	else
-	{
-		serialportForm* w = new serialportForm(m_serialport);
-		w->setAttribute(Qt::WA_DeleteOnClose, true);
-		w->show();
-	}
-}
-
-static int LUMA_LEVEL = 6;
-void fzqjMain_user::OnRecvSerialInfo(QByteArray buf)
-{
-	qDebug() << buf.toHex().toUpper() << endl;
-	uint16_t command = (buf[2] << 8) & 0xff00 | (buf[3] & 0xff);//0x0040
-	//对比协议转换成下发及控制指令
-	switch (command)
-	{
-	case 0x0200://光圈大
-		m_xk_down_msg.msg_type = E_FK_VL_LUMA_SET_LEVEL;
-		m_xk_down_msg.param_1 = LUMA_LEVEL + 1;
-		sendMsg2Pic();
-		m_xk_down_msg.msg_type = E_FK_BUTT;
-		//ui.lb_mainvideo->setText(QStringLiteral("可见光"));
-		break;
-	case 0x0400://光圈小
-		m_xk_down_msg.msg_type = E_FK_VL_LUMA_SET_LEVEL;
-		m_xk_down_msg.param_1 = LUMA_LEVEL - 1;
-		sendMsg2Pic();
-		m_xk_down_msg.msg_type = E_FK_BUTT;
-		//ui.lb_mainvideo->setText(QStringLiteral("可见光"));
-		break;
-	case 0x0000://停止
-		m_xk_down_msg.msg_type = E_FK_VL_STOP_ZOOM;
-		sendMsg2Pic();
-		m_xk_down_msg.msg_type = E_FK_IR_STOP_ZOOM;
-		sendMsg2Pic();
-		m_xk_down_msg.msg_type = E_FK_BUTT;
-		//
-		if (m_pic_up_realtime_state.dsp1_mode || m_pic_up_realtime_state.dsp2_mode)
-		{
-			return;
-		}
-		on_btn_sf_stop_clicked();
-		//sendSFshache();
-		break;
-	case 0x0002://云台-右
-		if (m_pic_up_realtime_state.dsp1_mode || m_pic_up_realtime_state.dsp2_mode)
-		{
-			qDebug() << QStringLiteral("伺服在跟踪状态！误操作");
-			return;
-		}
-		m_xk_down_msg.msg_type = E_FK_SF_MOVE;
-		m_xk_down_msg.param_1 = buf[4] * 3000 / 60;//方位速度
-		m_xk_down_msg.param_2 = 0;//俯仰速度
-		sendMsg2Pic();
-		break;
-	case 0x0004://云台-左   
-		if (m_pic_up_realtime_state.dsp1_mode || m_pic_up_realtime_state.dsp2_mode)
-		{
-			qDebug() << QStringLiteral("伺服在跟踪状态！误操作");
-			return;
-		}
-		m_xk_down_msg.msg_type = E_FK_SF_MOVE;
-		m_xk_down_msg.param_1 = buf[4] * 3000 / 60 * (-1);//方位速度
-		m_xk_down_msg.param_2 = 0;//俯仰速度
-		sendMsg2Pic();
-		break;
-	case 0x0008://云台向上
-		if (m_pic_up_realtime_state.dsp1_mode || m_pic_up_realtime_state.dsp2_mode)
-		{
-			qDebug() << QStringLiteral("伺服在跟踪状态！误操作");
-			return;
-		}
-		m_xk_down_msg.msg_type = E_FK_SF_MOVE;
-		m_xk_down_msg.param_1 = 0;
-		m_xk_down_msg.param_2 = buf[5] * 3000 / 60 * (-1);//俯仰速度
-		sendMsg2Pic();
-		break;
-	case 0x0010://云台向下
-		if (m_pic_up_realtime_state.dsp1_mode || m_pic_up_realtime_state.dsp2_mode)
-		{
-			qDebug() << QStringLiteral("伺服在跟踪状态！误操作");
-			return;
-		}
-		m_xk_down_msg.msg_type = E_FK_SF_MOVE;
-		m_xk_down_msg.param_1 = 0;
-		m_xk_down_msg.param_2 = buf[5] * 3000 / 60;//俯仰速度
-		sendMsg2Pic();
-		break;
-	case 0x000C://云台-左上   
-		if (m_pic_up_realtime_state.dsp1_mode || m_pic_up_realtime_state.dsp2_mode)
-		{
-			qDebug() << QStringLiteral("伺服在跟踪状态！误操作");
-			return;
-		}
-		m_xk_down_msg.msg_type = E_FK_SF_MOVE;
-		m_xk_down_msg.param_1 = buf[4] * 3000 / 60 * (-1);//方位速度
-		m_xk_down_msg.param_2 = buf[5] * 3000 / 60 * (-1);//俯仰速度
-		sendMsg2Pic();
-		break;
-	case 0x000A://云台右上
-		if (m_pic_up_realtime_state.dsp1_mode || m_pic_up_realtime_state.dsp2_mode)
-		{
-			qDebug() << QStringLiteral("伺服在跟踪状态！误操作");
-			return;
-		}
-		m_xk_down_msg.msg_type = E_FK_SF_MOVE;
-		m_xk_down_msg.param_1 = buf[4] * 3000 / 60;
-		m_xk_down_msg.param_2 = buf[5] * 3000 / 60 * (-1);//俯仰速度
-		sendMsg2Pic();
-		break;
-	case 0x0014://云台左下
-		if (m_pic_up_realtime_state.dsp1_mode || m_pic_up_realtime_state.dsp2_mode)
-		{
-			qDebug() << QStringLiteral("伺服在跟踪状态！误操作");
-			return;
-		}
-		m_xk_down_msg.msg_type = E_FK_SF_MOVE;
-		m_xk_down_msg.param_1 = buf[4] * 3000 / 60 * (-1);//方位速度
-		m_xk_down_msg.param_2 = buf[5] * 3000 / 60;//俯仰速度
-		sendMsg2Pic();
-		break;
-	case 0x0012://云台右下
-		if (m_pic_up_realtime_state.dsp1_mode || m_pic_up_realtime_state.dsp2_mode)
-		{
-			qDebug() << QStringLiteral("伺服在跟踪状态！误操作");
-			return;
-		}
-		m_xk_down_msg.msg_type = E_FK_SF_MOVE;
-		m_xk_down_msg.param_1 = buf[4] * 3000 / 60;//方位速度
-		m_xk_down_msg.param_2 = buf[5] * 3000 / 60;//俯仰速度
-		sendMsg2Pic();
-		break;
-	case 0x0040://变倍-  
-		m_xk_down_msg.msg_type = buf[1] == (char)0x01 ? E_FK_VL_ZOOM_DECREASES : E_FK_IR_ZOOM_DECREASES;
-		sendMsg2Pic();
-		m_xk_down_msg.msg_type = E_FK_BUTT;
-		ui.lb_mainvideo->setText(buf[1] == (char)0x01 ? QStringLiteral("可见光") : QStringLiteral("红外"));
-		break;
-	case 0x0020://变倍+
-		m_xk_down_msg.msg_type = buf[1] == (char)0x01 ? E_FK_VL_ZOOM_INCREASES : E_FK_IR_ZOOM_INCREASES;
-		sendMsg2Pic();
-		m_xk_down_msg.msg_type = E_FK_BUTT;
-		ui.lb_mainvideo->setText(buf[1] == (char)0x01 ? QStringLiteral("可见光") : QStringLiteral("红外"));
-		break;
-	case 0x0100://聚焦+
-		m_xk_down_msg.msg_type = buf[1] == (char)0x01 ? E_FK_VL_FOCUSING_DECREASES : E_FK_IR_FOCUSING_DECREASES;
-		sendMsg2Pic();
-		m_xk_down_msg.msg_type = E_FK_BUTT;
-		ui.lb_mainvideo->setText(buf[1] == (char)0x01 ? QStringLiteral("可见光") : QStringLiteral("红外"));
-		break;
-	case 0x0080://聚焦-
-		m_xk_down_msg.msg_type = buf[1] == (char)0x01 ? E_FK_VL_FOCUSING_INCREASES : E_FK_IR_FOCUSING_INCREASES;
-		sendMsg2Pic();
-		m_xk_down_msg.msg_type = E_FK_BUTT;
-		ui.lb_mainvideo->setText(buf[1] == (char)0x01 ? QStringLiteral("可见光") : QStringLiteral("红外"));
-		break;
-	case 0x0003://进入跟踪
-		if (buf[5] == (char)0xCF)
-		{
-			if (ui.lb_mainvideo->text() == "可见光")
-			{
-				m_xk_down_msg.msg_type = E_FK_AUTO_TRACK_AUTO_VL;
-				m_xk_down_msg.param_1 = 960;
-				m_xk_down_msg.param_2 = 540;
-				sendMsg2Pic();
-				m_xk_down_msg.msg_type = E_FK_BUTT;
-			}
-			else
-			{
-				m_xk_down_msg.msg_type = E_FK_AUTO_TRACK_AUTO_IR;
-				m_xk_down_msg.param_1 = 320;
-				m_xk_down_msg.param_2 = 256;
-				sendMsg2Pic();
-				m_xk_down_msg.msg_type = E_FK_BUTT;
-			}
-		}
-		else if (buf[5] == (char)0xD0)
-		{
-			if (ui.lb_mainvideo->text() == "可见光")
-			{
-				OnScreenClick_VL_Right(0, 0);
-			}
-			else
-			{
-				OnScreenClick_IR_Right(0, 0);
-			}
-
-		}
-		else if (buf[5] == (char)0xCD)//激光测距
-		{
-			if (ui.btn_start_1_dis_2->isEnabled())
-			{
-				m_xk_down_msg.msg_type = E_FK_LASER_RANGING_ONE;
-				sendMsg2Pic();
-				m_xk_down_msg.msg_type = E_FK_BUTT;
-			}
-			else
-			{
-				//
-			}
-		}
-		break;
-	case 0x0071://退出跟踪
-		break;
-	case 0x0073://退出跟踪
-	{
-		m_xk_down_msg.msg_type = E_FK_EXIT_TRACK;
-		sendMsg2Pic();
-		m_xk_down_msg.msg_type = E_FK_BUTT;
-		m_xk_down_msg.msg_type = E_FK_SF_STOP;
-		sendMsg2Pic();
-		m_xk_down_msg.msg_type = E_FK_BUTT;
-		break;
-	}
-	default:
-		break;
-	}
-}
-void fzqjMain_user::on_PosEvent(JoyPosInfoMsg info)
-{
-	if (m_pic_up_realtime_state.dsp1_mode || m_pic_up_realtime_state.dsp2_mode)
-	{
-		qDebug() << QStringLiteral("伺服在跟踪状态！误操作");
-		return;
-	}
-	if (!info.isMove)
-	{
-		m_xk_down_msg.msg_type = E_FK_SF_MOVE;
-		m_xk_down_msg.param_1 = 0;
-		m_xk_down_msg.param_2 = 0;
-		sendMsg2Pic();
-		m_xk_down_msg.msg_type = E_FK_SF_STOP;
-		sendMsg2Pic();
-		m_xk_down_msg.msg_type = E_FK_BUTT;
-		m_xk_down_msg.msg_type = E_FK_BUTT;
-		SF_Stop* t_sfStop = new SF_Stop(100);
-		connect(t_sfStop, SIGNAL(sig_timeover()), this, SLOT(sendSFsetV0()));
-		t_sfStop->start();
-	}
-	else
-	{
-		int xf = 0;
-		int yf = 0;
-		if (info.Xpos < 8191)
-		{
-			xf = -1;
-		}
-		else if (info.Xpos > 8191)
-		{
-			xf = 1;
-		}
-		if (info.Ypos < 8191)
-		{
-			yf = -1;
-		}
-		else if (info.Ypos > 8191)
-		{
-			yf = 1;
-		}
-		m_xk_down_msg.msg_type = E_FK_SF_MOVE;
-		float x = 255.0 - (float)info.Zpos;
-		float y;
-		if (x <= 100)
-		{
-			y = x * 200 / 100;
-		}
-		else
-		{
-			y = x * 18.0645 - 1606.45;
-		}
-		m_xk_down_msg.param_1 = y * xf;//方位速度
-		m_xk_down_msg.param_2 = y * yf;//俯仰速度
-		sendMsg2Pic();
-		m_xk_down_msg.msg_type = E_FK_BUTT;
-	}
-}
-
-void fzqjMain_user::on_BtnEvent(JoyBtnInfoMsg info)
-{
-	switch (info.btnNum)
-	{
-	case YAOGAN_0_:
-		if (info.isbtnPress)
-		{
-			if (b_yaogan_mainCamera)
-			{
-				OnScreenClick_IR_Right(0, 0);
-			}
-			else
-			{
-				OnScreenClick_VL_Right(0, 0);
-			}
-		}
-		break;
-	case YAOGAN_1_:
-		if (info.isbtnPress)
-		{
-			if (m_pic_up_realtime_state.dsp1_mode || m_pic_up_realtime_state.dsp2_mode)
-			{
-				qDebug() << QStringLiteral("伺服在跟踪状态！误操作");
-				return;
-			}
-			if (b_yaogan_mainCamera)
-			{
-				QString str = QStringLiteral("摇杆-切换主相机-可见光");
-				ShowLineText(0, 0, str);
-				ui.lb_mainvideo->setText(QStringLiteral("可见光"));
-			}
-			else
-			{
-				QString str = QStringLiteral("摇杆-切换主相机-红外");
-				ShowLineText(0, 0, str);
-				ui.lb_mainvideo->setText(QStringLiteral("红外"));
-			}
-			SetMainCamera(!b_yaogan_mainCamera);
-		}
-		break;
-	case YAOGAN_2_:
-		if (b_yaogan_mainCamera)
-		{
-			if (info.isbtnPress)
-			{
-				on_btn_ir_v_nadd_pressed();
-			}
-			else
-			{
-				on_btn_ir_v_nadd_released();
-			}
-		}
-		else
-		{
-			if (info.isbtnPress)
-			{
-				on_btn_vl_v_nadd_pressed();
-			}
-			else
-			{
-				on_btn_vl_v_nadd_released();
-			}
-		}
-		break;
-	case YAOGAN_3_:
-		if (b_yaogan_mainCamera)
-		{
-			if (info.isbtnPress)
-			{
-				on_btn_ir_v_add_pressed();
-			}
-			else
-			{
-				on_btn_ir_v_add_released();
-			}
-		}
-		else
-		{
-			if (info.isbtnPress)
-			{
-				on_btn_vl_v_add_pressed();
-			}
-			else
-			{
-				on_btn_vl_v_add_released();
-			}
-		}
-		break;
-	case YAOGAN_4_:
-		if (info.isbtnPress)
-		{
-			on_btn_vl_v_nadd_pressed();
-		}
-		else
-		{
-			on_btn_vl_v_nadd_released();
-		}
-		break;
-	case YAOGAN_5_:
-		if (info.isbtnPress)
-		{
-			on_btn_vl_v_add_pressed();
-		}
-		else
-		{
-			on_btn_vl_v_add_released();
-		}
-		break;
-	case YAOGAN_6_:
-		break;
-	case YAOGAN_7_:
-		break;
-	case YAOGAN_8_:
-		if (info.isbtnPress)
-		{
-			on_btn_vl_focuse_minus_pressed();
-		}
-		else
-		{
-			on_btn_vl_focuse_minus_released();
-		}
-		break;
-	case YAOGAN_9_:
-		if (info.isbtnPress)
-		{
-			on_btn_vl_focue_add_pressed();
-		}
-		else
-		{
-			on_btn_vl_focue_add_released();
-		}
-		break;
-	case YAOGAN_10_:
-		if (info.isbtnPress)
-		{
-			on_btn_ir_v_add_pressed();
-		}
-		else
-		{
-			on_btn_ir_v_add_released();
-		}
-		break;
-	case YAOGAN_11_:
-		if (info.isbtnPress)
-		{
-			on_btn_ir_v_nadd_pressed();
-		}
-		else
-		{
-			on_btn_ir_v_nadd_released();
-		}
-		break;
-	case YAOGAN_12_:
-		break;
-	case YAOGAN_13_:
-		break;
-	case YAOGAN_14_:
-		if (info.isbtnPress)
-		{
-			on_btn_ir_focue_add_pressed();
-		}
-		else
-		{
-			on_btn_ir_focue_add_released();
-		}
-		break;
-	case YAOGAN_15_:
-		if (info.isbtnPress)
-		{
-			on_btn_ir_focuse_minus_pressed();
-		}
-		else
-		{
-			on_btn_ir_focuse_minus_released();
-		}
-		break;
-	default:
-		break;
-	}
-}
-
-void fzqjMain_user::on_PovEvent(bool state)
-{
-	//激光测距-暂时作废
-	int a = 1;
-	if ((state) && (!m_bLaserDisStart))
-	{
-		on_btn_start_more_dis_clicked();
-	}
-	else if ((!state) && (m_bLaserDisStart))
-	{
-		on_btn_start_more_dis_clicked();
-	}
-}
-
-void fzqjMain_user::on_StateEvent(bool state)
-{
-	m_yaogan_isOpen = state;
-}
-
-
-
 void fzqjMain_user::on_btn_stop_dis_2_clicked(void)
 {
 	//关闭定时器-关闭连续测距使能
@@ -2764,33 +2224,7 @@ void fzqjMain_user::on_btn_stop_dis_2_clicked(void)
 	ui.btn_start_1_dis_2->setEnabled(false);
 	ui.btn_start_more_dis->setEnabled(false);
 }
-void fzqjMain_user::on_btn_openSerialPort_clicked(void)
-{
-	QString str = QStringLiteral("系统控制-摇杆-打开串口");
-	ShowLineText(0, 0, str);
-	if (ui.btn_openSerialPort->text() == QStringLiteral("打开串口"))
-	{
-		bool ret = m_serialport->Init();
-		if (ret)
-		{
-			m_serialport->start();
-			m_serial_isOpen = true;
-		}
-		else
-		{
-			m_serial_isOpen = false;
-			QMessageBox::question(NULL, QStringLiteral("异常"), QStringLiteral("串口打开失败，请检查设置参数！"), QMessageBox::Ok, QMessageBox::Cancel);
-			return;
-		}
-		ui.btn_openSerialPort->setText(QStringLiteral("关闭串口"));
-	}
-	else
-	{
-		m_serialport->Close();
-		m_serial_isOpen = false;
-		ui.btn_openSerialPort->setText(QStringLiteral("打开串口"));
-	}
-}
+
 void fzqjMain_user::on_btn_start_1_dis_2_clicked(void)
 {
 	QString str = QStringLiteral("激光测距-单次测距");
@@ -3846,11 +3280,6 @@ void fzqjMain_user::vl_display_mode_caise(void)
 	m_xk_down_msg.msg_type = E_FK_VL_IR_CLOSE;
 	sendMsg2Pic();
 	m_xk_down_msg.msg_type = E_FK_BUTT;
-}
-
-void fzqjMain_user::on_btn_vl_dehaze_open(void)
-{
-	//
 }
 
 bool fzqjMain_user::is_windows_open(QString str_windows)
