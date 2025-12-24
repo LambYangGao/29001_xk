@@ -54,8 +54,8 @@ typedef enum XKMsgType
 	E_FK_SET_TIME = 0x0B,//设置系统时间 年月日 时 分 秒
 
 	//可见光1-2
-	E_FK_VL_BLACK_TARGET = 0x10, // 是否暗目标-是
-	E_FK_VL_WRITE_TARGET = 0x11, // 是否暗目标-否
+	E_FK_VL_BLACK_TARGET = 0x10, //是否暗目标-是
+	E_FK_VL_WRITE_TARGET = 0x11, //是否暗目标-否
 
 	E_FK_VL_OPEN = 0x12, //可见光上电 visible light
 	E_FK_VL_CLOSE = 0x13, //可见光下电 visible light

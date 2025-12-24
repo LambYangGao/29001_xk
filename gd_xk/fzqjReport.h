@@ -19,7 +19,6 @@ signals:
 	void sig_report_send(XKUpDevStateMsg in_msg);
 public slots:
 	void on_btn_report_send_clicked(void);
-
-private: 
+private:
 	Ui::fzqjReportClass ui;
 };

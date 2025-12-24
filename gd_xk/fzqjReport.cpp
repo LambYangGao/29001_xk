@@ -20,7 +20,6 @@ void fzqjReport::init_windows(void)
 	ui.txt_target_dis_value->setText(QString::number(manualTarget.targetDis));
 }
 
-
 void fzqjReport::on_btn_report_send_clicked(void)
 {
 	manualTarget.Lon = ui.txt_local_lon_value->toPlainText().toDouble()* 1000000;

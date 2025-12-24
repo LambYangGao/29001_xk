@@ -18,6 +18,7 @@ void init_xk_up_heart_msg(XKUpHeartMsg* msg)
 	msg->version = 0x01;
 	msg->flag = 0x0200;
 	msg->MLen = 55;
+
 }
 
 void init_xk_up_devState_msg(XKUpDevStateMsg* msg)
