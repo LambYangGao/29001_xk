@@ -14,8 +14,8 @@
 #include "fzqjReport.h"
 
 
-fzqjMain_user::fzqjMain_user(QWidget* parent)
-	: QWidget(parent)
+fzqjMain_user::fzqjMain_user(AppConfig* config, QWidget* parent)
+    : QWidget(parent), m_appConfig(config)
 {
 	ui.setupUi(this);
 	showFullScreen();
@@ -33,7 +33,6 @@ fzqjMain_user::fzqjMain_user(QWidget* parent)
 
 	//配置文件初始化
 	m_configManager = new ConfigManager("Config.ini");
-	m_configManager->print();
 	init_XKConfigInfo(m_configManager, &m_xk_configinfo);
 	InitConfigInfo();
 	
@@ -253,11 +252,12 @@ void fzqjMain_user::setLaserForbidPara(float fw_start, float fw_stop, float fy_s
 	m_xk_configinfo.laser_forbid_fw_stop = fw_stop;
 	m_xk_configinfo.laser_forbid_fy_start = fy_start;
 	m_xk_configinfo.laser_forbid_fy_stop = fy_stop;
-	m_configManager->set("LASER_FORBID_FW_START", QString::number(m_xk_configinfo.laser_forbid_fw_start).toStdString());
-	m_configManager->set("LASER_FORBID_FW_STOP", QString::number(m_xk_configinfo.laser_forbid_fw_stop).toStdString());
-	m_configManager->set("LASER_FORBID_FY_START", QString::number(m_xk_configinfo.laser_forbid_fy_start).toStdString());
-	m_configManager->set("LASER_FORBID_FY_STOP", QString::number(m_xk_configinfo.laser_forbid_fy_stop).toStdString());
-	m_configManager->print("Config.ini");
+    AppConfig::LaserForbidConfig cfg;
+    cfg.fwStart = fw_start;
+    cfg.fwStop = fw_stop;
+    cfg.fyStart = fy_start;
+    cfg.fyStop = fy_stop;
+    m_appConfig->setLaserForbidConfig(cfg);
 }
 void fzqjMain_user::setSfCompensate(float fw_com, float fy_com)
 {
@@ -306,10 +306,11 @@ void fzqjMain_user::on_btn_clear_recvText_2_clicked(void)
 
 void fzqjMain_user::updatePixNumAll(void)
 {
-	/*m_xk_configinfo.IS_GUIDE_ADAPT_VIEW = m_configManager->read("IS_GUIDE_ADAPT_VIEW", 0);*/
-	m_xk_configinfo.GUIDE_ADPAT_VIEW_PIXE_VI = m_configManager->read("GUIDE_ADPAT_VIEW_PIXE_VI", 0);
-	m_xk_configinfo.GUIDE_ADPAT_VIEW_PIXE_IR = m_configManager->read("GUIDE_ADPAT_VIEW_PIXE_IR", 0);
-	m_xk_configinfo.GUIDE_ADPAT_VIEW_SIZE = m_configManager->read("GUIDE_ADPAT_VIEW_SIZE", 0);
+    // [Refactor] 读取引导参数
+    auto cfg = m_appConfig->getGuideAdaptConfig();
+    m_xk_configinfo.GUIDE_ADPAT_VIEW_PIXE_VI = cfg.pixeVi;
+    m_xk_configinfo.GUIDE_ADPAT_VIEW_PIXE_IR = cfg.pixeIr;
+    m_xk_configinfo.GUIDE_ADPAT_VIEW_SIZE = cfg.viewSize;
 }
 
 void fzqjMain_user::gdRebootSend(void)
@@ -400,182 +401,155 @@ void fzqjMain_user::ir_img_changed(cv::Mat in_mat)
 
 }
 
+void fzqjMain_user::mapProtocolToStatus()
+{
+    // 1. 伺服状态映射
+    m_deviceStatus.servoMode = DeviceStatus::parseServoMode(m_pic_up_realtime_state.mode);
+
+    // 2. 角度映射 (协议单位 -> 物理单位 度)
+    m_deviceStatus.azimuth = (double)m_pic_up_realtime_state.fw / 1000.0;
+    m_deviceStatus.pitch = (double)m_pic_up_realtime_state.fy / 1000.0;
+
+    // 3. 视场角映射 (协议单位 -> 物理单位 度)
+    m_deviceStatus.vlFovX = (double)m_pic_up_realtime_state.VIshichang_X / 100.0;
+    m_deviceStatus.vlFovY = (double)m_pic_up_realtime_state.VIshichang_Y / 100.0;
+    m_deviceStatus.irFovX = (double)m_pic_up_realtime_state.IRshichang_X / 100.0;
+    m_deviceStatus.irFovY = (double)m_pic_up_realtime_state.IRshichang_Y / 100.0;
+
+    // 4. 跟踪状态
+    m_deviceStatus.isTrackingVL = (m_pic_up_realtime_state.dsp1_mode != 0);
+    m_deviceStatus.isTrackingIR = (m_pic_up_realtime_state.dsp2_mode != 0);
+
+    // 5. 测距信息
+    m_deviceStatus.laserDistance = m_pic_up_realtime_state.fake_distance;
+    m_deviceStatus.laserErrorCode = m_pic_up_realtime_state.error_distance;
+
+    // 6. 焦距信息 (原代码逻辑: 发送值 = VIfocuesValue / 100)
+    m_deviceStatus.vlFocalLength = m_pic_up_realtime_state.VIfocuesValue / 100;
+    m_deviceStatus.irFocalLength = m_pic_up_realtime_state.IRfocuesValue / 100;
+
+    // 7. 智能识别
+    m_deviceStatus.aiTypeVL = static_cast<DeviceStatus::TargetType>(m_pic_up_realtime_state.AI_target_type_VL);
+    m_deviceStatus.aiTypeIR = static_cast<DeviceStatus::TargetType>(m_pic_up_realtime_state.AI_target_type_IR);
+    m_deviceStatus.aiSizeVL = m_pic_up_realtime_state.ai_vi_size;
+    m_deviceStatus.aiSizeIR = m_pic_up_realtime_state.ai_ir_size;
+
+    // 8. 跟踪目标原始数据 (用于计算GPS)
+    m_deviceStatus.vlTargetRawAz = m_pic_up_realtime_state.dsp1_target_fw;
+    m_deviceStatus.vlTargetRawEl = m_pic_up_realtime_state.dsp1_target_fy;
+    m_deviceStatus.irTargetRawAz = m_pic_up_realtime_state.dsp2_target_fw;
+    m_deviceStatus.irTargetRawEl = m_pic_up_realtime_state.dsp2_target_fy;
+}
+
 void fzqjMain_user::UpdateRealTimeState(void)
 {
-	//ui.label_videodisplay_vl->SetTarget((double)(m_pic_up_realtime_state.dsp1_target_x) / 1920.0, (double)(m_pic_up_realtime_state.dsp1_target_y) / 1080.0);
-	//ui.label_videodisplay_ir->SetTarget((double)(m_pic_up_realtime_state.dsp2_target_x) / 640.0, (double)(m_pic_up_realtime_state.dsp2_target_y) / 512.0);
+    // 1. 伺服状态显示
+    QString sfstr = "N/A";
+    switch (m_deviceStatus.servoMode) // 使用枚举判断
+    {
+    case DeviceStatus::ServoMode::FanScan:    sfstr = QStringLiteral("扇扫"); break;
+    case DeviceStatus::ServoMode::CircleScan: sfstr = QStringLiteral("周扫"); break;
+    case DeviceStatus::ServoMode::Follow:     sfstr = QStringLiteral("随动"); break;
+    case DeviceStatus::ServoMode::Tracking:   sfstr = QStringLiteral("跟踪"); break;
+    case DeviceStatus::ServoMode::Collection: sfstr = QStringLiteral("收藏"); break;
+    case DeviceStatus::ServoMode::Zeroing:    sfstr = QStringLiteral("归零"); break;
+    case DeviceStatus::ServoMode::Stop:       sfstr = QStringLiteral("伺服停止"); break;
+    case DeviceStatus::ServoMode::SemiAuto:   sfstr = QStringLiteral("半自动"); break;
+    default: break;
+    }
+    ui.lb_sf_state_2->setText(sfstr);
 
-	//伺服状态
-	QString sfstr = "N/A";
-	switch ((int)m_pic_up_realtime_state.mode)
-	{
-	case 1:
-		sfstr = QStringLiteral("扇扫");
-		break;
-	case 2:
-		sfstr = QStringLiteral("周扫");
-		break;
-	case 4:
-		sfstr = QStringLiteral("随动");
-		break;
-	case 8:
-		sfstr = QStringLiteral("跟踪");
-		break;
-	case 16:
-		sfstr = QStringLiteral("收藏");
-		break;
-	case 32:
-		sfstr = QStringLiteral("归零");
-		break;
-	case 64:
-		sfstr = QStringLiteral("伺服停止");
-		break;
-	case 128:
-		sfstr = QStringLiteral("半自动");
-		break;
-	default:
-		break;
-	}
-	ui.lb_sf_state_2->setText(sfstr);
-	ui.lb_sf_fw_2->setText(QString::number(((float)m_pic_up_realtime_state.fw) / 1000, 'f', 3));
-	ui.lb_sf_fy_2->setText(QString::number(((float)m_pic_up_realtime_state.fy) / 1000, 'f', 3));
-	//视场角
-	QString vi_x = QString::number((float)m_pic_up_realtime_state.VIshichang_X / 100, 'f', 2);
-	QString vi_y = QString::number((float)m_pic_up_realtime_state.VIshichang_Y / 100, 'f', 2);
-	ui.lb_vl_shichang_2->setText(vi_x + "*" + vi_y);
-	QString ir_x = QString::number((float)m_pic_up_realtime_state.IRshichang_X / 100, 'f', 2);
-	QString ir_y = QString::number((float)m_pic_up_realtime_state.IRshichang_Y / 100, 'f', 2);
-	ui.lb_ir_shichang_2->setText(ir_x + "*" + ir_y);
-	ui.lb_trackstate_dsp1_2->setText(m_pic_up_realtime_state.dsp1_mode ? QStringLiteral("跟踪") : QStringLiteral("检测"));
-	ui.lb_trackstate_dsp2_2->setText(m_pic_up_realtime_state.dsp2_mode ? QStringLiteral("跟踪") : QStringLiteral("检测"));
-	//可见光
-	double t_dis = m_pic_up_realtime_state.fake_distance;
-	//目标经纬高
-	m_mycordTrans->targetPolar2TargetGps(weidu, jingdu, gaodu, 0, 0, 0, t_dis, m_pic_up_realtime_state.fw / 1000.0, m_pic_up_realtime_state.fy / 1000.0, t_lat_vl, t_log_vl, t_high_vl);
-	//红外
-	m_mycordTrans->targetPolar2TargetGps(weidu, jingdu, gaodu, 0, 0, 0, t_dis, m_pic_up_realtime_state.fw / 1000.0, m_pic_up_realtime_state.fy / 1000.0, t_lat_ir, t_log_ir, t_high_ir);
-	if (m_pic_up_realtime_state.dsp1_mode)
-	{
-		ui.lb_target_high->setText(QString::number(t_high_vl, 'f', 3));
-	}
-	else if (m_pic_up_realtime_state.dsp2_mode)
-	{
-		ui.lb_target_high->setText(QString::number(t_high_ir, 'f', 3));
-	}
-	//AI
-	QString str_type;
-	int temp_Type;
-	if (target_manul_type == 0)//AI识别目标类型
-	{
-		if (m_pic_up_realtime_state.AI_target_type_IR != 0)//同时识别时以红外为准
-		{
-			temp_Type = m_pic_up_realtime_state.AI_target_type_IR;
-		}
-		else
-		{
-			temp_Type = m_pic_up_realtime_state.AI_target_type_VL;
-		}
-		switch (temp_Type)
-		{
-		case 0:
-			temp_Type = FK_TARGET_UNKNOWN;
-			break;
-		case 1:
-			temp_Type = FK_TARGET_XUANYI_WRJ;
-			break;
-		case 2:
-			temp_Type = FK_TARGET_GUDINGYI_WRJ;
-			break;
-		case 3:
-			temp_Type = FK_TARGET_ZHISHENG;
-			break;
-		case 4:
-			temp_Type = FK_TARGET_KONGPIAOWU;
-			break;
-		case 5:
-			temp_Type = FK_TARGET_KONGPIAOWU;
-			break;
-		case 6:
-			temp_Type = FK_TARGET_MINHANG;
-			break;
-		default:
-			break;
-		}
-	}
-	else//手动设置目标类型
-	{
-		temp_Type = target_manul_type - 1;
-		switch (temp_Type)
-		{
-		case 0:
-			str_type = QStringLiteral("不明");
-			break;
-		case 1:
-			str_type = QStringLiteral("直升机");
-			break;
-		case 2:
-			str_type = QStringLiteral("固定翼无人机");
-			break;
-		case 3:
-			str_type = QStringLiteral("旋翼无人机");
-			break;
-		case 4:
-			str_type = QStringLiteral("民航");
-			break;
-		case 5:
-			str_type = QStringLiteral("车");
-			break;
-		case 6:
-			str_type = QStringLiteral("鸟");
-			break;
-		case 7:
-			str_type = QStringLiteral("空飘球");
-			break;
-		case 8:
-			str_type = QStringLiteral("大型无人机");
-			break;
-		case 9:
-			str_type = QStringLiteral("空飘物");
-			break;
-		default:
-			break;
-		}
-	}
-	//测距
-	if (m_pic_up_realtime_state.error_distance == 0xff)
-	{
-		ui.txt_target_dis->setText(QString::number(m_pic_up_realtime_state.fake_distance));
-	}
-	else
-	{
-		QString errorStr;
-		switch (m_pic_up_realtime_state.error_distance)
-		{
-		case 0xDF:
-			errorStr = QStringLiteral("无回波");
-			break;
-		case 0xEF:
-			errorStr = QStringLiteral("无主波");
-			break;
-		case 0xF7:
-			errorStr = QStringLiteral("NC");
-			break;
-		case 0xFB:
-			errorStr = QStringLiteral("激光电源故障");
-			break;
-		case 0xFD:
-			errorStr = QStringLiteral("APD电压故障");
-			break;
-		case 0xFE:
-			errorStr = QStringLiteral("信号处理电路故障");
-			break;
-		default:
-			break;
-		}
-		ui.txt_target_dis->setText(errorStr);
-	}
-	//发送焦距
-	emit sig_focal_length_send(m_pic_up_realtime_state.VIfocuesValue/100, m_pic_up_realtime_state.IRfocuesValue/100);
+    // 使用 double 直接显示，无需再除以 1000
+    ui.lb_sf_fw_2->setText(QString::number(m_deviceStatus.azimuth, 'f', 3));
+    ui.lb_sf_fy_2->setText(QString::number(m_deviceStatus.pitch, 'f', 3));
+
+    // 2. 视场角
+    QString vi_x = QString::number(m_deviceStatus.vlFovX, 'f', 2);
+    QString vi_y = QString::number(m_deviceStatus.vlFovY, 'f', 2);
+    ui.lb_vl_shichang_2->setText(vi_x + "*" + vi_y);
+
+    QString ir_x = QString::number(m_deviceStatus.irFovX, 'f', 2);
+    QString ir_y = QString::number(m_deviceStatus.irFovY, 'f', 2);
+    ui.lb_ir_shichang_2->setText(ir_x + "*" + ir_y);
+
+    // 3. 跟踪状态文字
+    ui.lb_trackstate_dsp1_2->setText(m_deviceStatus.isTrackingVL ? QStringLiteral("跟踪") : QStringLiteral("检测"));
+    ui.lb_trackstate_dsp2_2->setText(m_deviceStatus.isTrackingIR ? QStringLiteral("跟踪") : QStringLiteral("检测"));
+
+    // 4. 目标经纬高计算
+    double t_dis = m_deviceStatus.laserDistance;
+    m_mycordTrans->targetPolar2TargetGps(weidu, jingdu, gaodu, 0, 0, 0, t_dis, m_deviceStatus.azimuth, m_deviceStatus.pitch, t_lat_vl, t_log_vl, t_high_vl);
+    m_mycordTrans->targetPolar2TargetGps(weidu, jingdu, gaodu, 0, 0, 0, t_dis, m_deviceStatus.azimuth, m_deviceStatus.pitch, t_lat_ir, t_log_ir, t_high_ir);
+
+    if (m_deviceStatus.isTrackingVL)
+    {
+        ui.lb_target_high->setText(QString::number(t_high_vl, 'f', 3));
+    }
+    else if (m_deviceStatus.isTrackingIR)
+    {
+        ui.lb_target_high->setText(QString::number(t_high_ir, 'f', 3));
+    }
+
+    // 5. AI 目标类型显示
+    QString str_type;
+    int temp_Type;
+    if (target_manul_type == 0)// AI识别目标类型
+    {
+        // 优先显示红外
+        DeviceStatus::TargetType typeEnum = (m_deviceStatus.aiTypeIR != DeviceStatus::TargetType::Unknown)
+            ? m_deviceStatus.aiTypeIR
+            : m_deviceStatus.aiTypeVL;
+
+        temp_Type = static_cast<int>(typeEnum);
+
+        switch (typeEnum)
+        {
+        case DeviceStatus::TargetType::Unknown: temp_Type = FK_TARGET_UNKNOWN; break;
+        case DeviceStatus::TargetType::RotorDrone: temp_Type = FK_TARGET_XUANYI_WRJ; break;
+        }
+    }
+    else // 手动设置目标类型
+    {
+        temp_Type = target_manul_type - 1;
+        switch (temp_Type)
+        {
+        case 0: str_type = QStringLiteral("不明"); break;
+        case 1: str_type = QStringLiteral("直升机"); break;
+        case 2: str_type = QStringLiteral("固定翼无人机"); break;
+        case 3: str_type = QStringLiteral("旋翼无人机"); break;
+        case 4: str_type = QStringLiteral("民航"); break;
+        case 5: str_type = QStringLiteral("车"); break;
+        case 6: str_type = QStringLiteral("鸟"); break;
+        case 7: str_type = QStringLiteral("空飘球"); break;
+        case 8: str_type = QStringLiteral("大型无人机"); break;
+        case 9: str_type = QStringLiteral("空飘物"); break;
+        default: break;
+        }
+    }
+
+    // 6. 测距显示
+    if (m_deviceStatus.laserErrorCode == 0xff || m_deviceStatus.laserErrorCode == 0)
+    {
+        ui.txt_target_dis->setText(QString::number(m_deviceStatus.laserDistance));
+    }
+    else
+    {
+        QString errorStr;
+        switch (m_deviceStatus.laserErrorCode)
+        {
+        case 0xDF: errorStr = QStringLiteral("无回波"); break;
+        case 0xEF: errorStr = QStringLiteral("无主波"); break;
+        case 0xF7: errorStr = QStringLiteral("NC"); break;
+        case 0xFB: errorStr = QStringLiteral("激光电源故障"); break;
+        case 0xFD: errorStr = QStringLiteral("APD电压故障"); break;
+        case 0xFE: errorStr = QStringLiteral("信号处理电路故障"); break;
+        default: break;
+        }
+        ui.txt_target_dis->setText(errorStr);
+    }
+
+    // 7. 发送焦距信号
+    emit sig_focal_length_send(m_deviceStatus.vlFocalLength, m_deviceStatus.irFocalLength);
 }
 
 void fzqjMain_user::UpdateSelfCheckState(void)
@@ -796,15 +770,13 @@ void fzqjMain_user::sendMsg2Pic(XKDownMsg xk_down_msg)
 
 void fzqjMain_user::InitSFyzw(void)
 {
-	ui.cbx_sf_yzw_num->clear();
-	for (int i = 1; i < 51; i++)
-	{
-		QString key = "SF_";
-		key.append(QString::number(i));
-		std::string value = m_configManager->read(key.toStdString(), "");
-		m_sf_yzw_list.append(QString::fromStdString(value));
-		ui.cbx_sf_yzw_num->addItem(QString::fromStdString(value));
-	}
+    ui.cbx_sf_yzw_num->clear();
+    for (int i = 1; i < 51; i++)
+    {
+        QString value = m_appConfig->getPresetName(i);
+        m_sf_yzw_list.append(value);
+        ui.cbx_sf_yzw_num->addItem(value);
+    }
 }
 void fzqjMain_user::on_btn_SetDevLocation_clicked(void)
 {
@@ -834,10 +806,11 @@ void fzqjMain_user::on_btn_SetDevLocation_clicked(void)
 	m_xk_up_devState.Lat = weidu * 1000000;
 	m_xk_up_devState.Alt = gaodu * 100;
 
-	m_configManager->set("this_jingdu", ui.txt_jingdu->text().toStdString());
-	m_configManager->set("this_weidu", ui.txt_weidu->text().toStdString());
-	m_configManager->set("this_gaodu", ui.txt_gaodu->text().toStdString());
-	m_configManager->print("Config.ini");
+    AppConfig::LocalLocation loc;
+    loc.lng = ui.txt_jingdu->text().toDouble();
+    loc.lat = ui.txt_weidu->text().toDouble();
+    loc.alt = ui.txt_gaodu->text().toDouble();
+    m_appConfig->setLocalLocation(loc);
 	QString str = QStringLiteral("激光测距-设备位置-设置");
 	ShowLineText(0, 0, str);
 }
@@ -1461,6 +1434,9 @@ void fzqjMain_user::OnRecvData(QByteArray data)
 				{
 					m_pic_up_realtime_state.fw += 360000;
 				}
+                // 将协议数据映射到领域对象
+                mapProtocolToStatus();
+				
 				//更新实时状态
 				UpdateRealTimeState();
 				//更新上报防控状态
@@ -2063,8 +2039,7 @@ void fzqjMain_user::on_btn_Lidar_YinDao_Focus_clicked(void)
 	{
 		ui.btn_Lidar_YinDao_Focus->setText(QStringLiteral("自动变焦中..."));
 		SetBtnHighLight(ui.btn_Lidar_YinDao_Focus, true);
-		m_configManager->set("IS_GUIDE_ADAPT_VIEW", "1");
-		m_configManager->print("Config.ini");
+		m_appConfig->setGuideAdaptView(true);
 		is_guideing = true;
 		m_timer500->start();
 	}
@@ -2072,8 +2047,7 @@ void fzqjMain_user::on_btn_Lidar_YinDao_Focus_clicked(void)
 	{
 		ui.btn_Lidar_YinDao_Focus->setText(QStringLiteral("引导自动变焦"));
 		SetBtnHighLight(ui.btn_Lidar_YinDao_Focus, false);
-		m_configManager->set("IS_GUIDE_ADAPT_VIEW", "0");
-		m_configManager->print("Config.ini");
+		m_appConfig->setGuideAdaptView(false);
 		is_guideing = false;
 		
 		m_timer500->stop();
@@ -3746,14 +3720,12 @@ void fzqjMain_user::on_cbx_sf_yzw_num_editTextChanged(const QString&)
 	{
 		if (m_sf_yzw_list[ui.cbx_sf_yzw_num->currentIndex()] != ui.cbx_sf_yzw_num->currentText())
 		{
-			int index = ui.cbx_sf_yzw_num->currentIndex();
+            int index = ui.cbx_sf_yzw_num->currentIndex();
+            QString newVal = ui.cbx_sf_yzw_num->currentText();
 
-			QString key = "SF_";
-			key.append(QString::number(ui.cbx_sf_yzw_num->currentIndex() + 1));
-			m_configManager->set(key.toStdString(), ui.cbx_sf_yzw_num->currentText().toStdString());
-			m_configManager->print("Config.ini");
+			m_appConfig->setPresetName(index + 1, newVal);
 
-			m_sf_yzw_list[ui.cbx_sf_yzw_num->currentIndex()] = ui.cbx_sf_yzw_num->currentText();
+			m_sf_yzw_list[index] = newVal;
 
 			InitSFyzw();
 

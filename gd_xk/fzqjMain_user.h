@@ -16,6 +16,8 @@
 #include"fzqjGetPicSize.h"
 #include"loginfo.h"
 #include<qmovie.h>
+#include "DeviceStatus.h"
+#include "AppConfig.h"
 
 
 
@@ -24,7 +26,7 @@ class fzqjMain_user : public QWidget
 	Q_OBJECT
 
 public:
-	fzqjMain_user(QWidget* parent = Q_NULLPTR);
+	fzqjMain_user(AppConfig* config, QWidget* parent = Q_NULLPTR);
 	~fzqjMain_user(void);
 
 	bool bRecording_VI = false;
@@ -43,6 +45,10 @@ public:
 	XKDownConfig m_xk_down_config;
 private:
 	Ui::fzqjMain_user ui;
+
+    DeviceStatus m_deviceStatus; // 业务对象，作为 UI 的数据源
+	AppConfig* m_appConfig; // AppConfig 成员
+
 	//视频网络地址
 	QString m_Video_ip = "192.168.0.100";
 	QString m_PicIP = "192.168.0.90";
@@ -210,6 +216,8 @@ signals:
 	void sig_focal_length_send(int vi_num,int ir_num);
 	void sigSendLaserForbidPara(float fw_start, float fw_stop, float fy_start, float fy_stop);
 private:
+    
+    void mapProtocolToStatus(); // 声明数据映射函数
 	void UpdateRealTimeState(void);//接收图像板数据后，更新实时状态数据
 	void UpdateSelfCheckState(void);//接收图像板数据后，更新自检信息
 	void UpdateFKDevState(void);//接收图像板数据后，更新待发送防控目标数据
