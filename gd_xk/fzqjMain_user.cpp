@@ -20,13 +20,21 @@ fzqjMain_user::fzqjMain_user(AppConfig* config, QWidget* parent)
 	ui.setupUi(this);
 	showFullScreen();
 
+	// 初始化 LaserController
+    m_laserController = new LaserController(m_appConfig, this); 
+    connect(m_laserController, &LaserController::requestSendFk, this, QOverload<XKDownMsg>::of(&fzqjMain_user::sendMsg2Pic)); // 将 Controller 的发送请求连接到当前的发送函数
+    connect(m_laserController, &LaserController::continuousRangingChanged, this, &fzqjMain_user::onLaserContinuousChanged); // UI 反馈连接
+
+    // 初始化 GimbalController
+    m_gimbalController = new GimbalController(this);
+    connect(m_gimbalController, &GimbalController::requestSendFk, this, QOverload<XKDownMsg>::of(&fzqjMain_user::sendMsg2Pic));
+
 	//与设备通信
 	init_xk_down_msg(&m_xk_down_msg);
 	init_pic_up_realtime_msg(&m_pic_up_realtime_state);
 	init_pic_up_selfcheck_msg(&m_pic_up_selfcheck_state);
 
 	//与防控通信
-
 	init_xk_up_heart_msg(&m_xk_up_heart);
 	init_xk_up_devState_msg(&m_xk_up_devState);
 	init_xk_up_log_msg(&m_xk_up_log);
@@ -80,6 +88,16 @@ fzqjMain_user::fzqjMain_user(AppConfig* config, QWidget* parent)
 	m_logRealTime = new LogInfo(1024 * 10, RealStr);
 	m_logSelfCheck = new LogInfo(1024 * 10, SelfStr);
 	m_logSelfCheck->start();
+
+
+    // 当激光配置改变时，自动重新读取并打印日志
+    connect(m_appConfig, &AppConfig::laserConfigChanged, [this]() {
+        auto cfg = m_appConfig->getLaserForbidConfig();
+        m_xk_configinfo.laser_forbid_fw_start = cfg.fwStart;
+        ShowLineText(0, 0, QStringLiteral("配置变更：激光禁区已更新"));
+        });
+    // 当引导配置改变时，自动更新像素参数
+    connect(m_appConfig, &AppConfig::guideConfigChanged, this, &fzqjMain_user::updatePixNumAll);
 
 
 	//界面-右上角
@@ -220,26 +238,9 @@ void fzqjMain_user::sendDevStateMsg2FK(void)
 
 void fzqjMain_user::sendSFsetV0(void)
 {
-	m_xk_down_msg.msg_type = E_FK_SF_MOVE;
-	m_xk_down_msg.param_1 = 0;
-	m_xk_down_msg.param_2 = 0;
-	sendMsg2Pic();
-	m_xk_down_msg.msg_type = E_FK_SF_STOP;
-	sendMsg2Pic();
-	m_xk_down_msg.msg_type = E_FK_BUTT;
-	m_xk_down_msg.msg_type = E_FK_BUTT;
+	m_gimbalController->stopMove();
 }
 
-void fzqjMain_user::sendSFshache(void)
-{
-	m_xk_down_msg.msg_type = E_FK_SF_MOVE;
-	m_xk_down_msg.param_1 = 0;
-	m_xk_down_msg.param_2 = 0;
-	sendMsg2Pic();
-	m_xk_down_msg.msg_type = E_FK_BUTT;
-
-	on_btn_sf_stop_clicked();
-}
 
 void fzqjMain_user::getLaserForbidPara(void)
 {
@@ -406,25 +407,37 @@ void fzqjMain_user::mapProtocolToStatus()
     // 1. 伺服状态映射
     m_deviceStatus.servoMode = DeviceStatus::parseServoMode(m_pic_up_realtime_state.mode);
 
-    // 2. 角度映射 (协议单位 -> 物理单位 度)
-    m_deviceStatus.azimuth = (double)m_pic_up_realtime_state.fw / 1000.0;
-    m_deviceStatus.pitch = (double)m_pic_up_realtime_state.fy / 1000.0;
+    // 2. 角度映射 (增加数据清洗：规范化到 0~360 度)
+    double rawAz = (double)m_pic_up_realtime_state.fw / 1000.0;
+    while (rawAz >= 360.0) rawAz -= 360.0;
+    while (rawAz < 0.0) rawAz += 360.0;
+    m_deviceStatus.azimuth = rawAz;
 
-    // 3. 视场角映射 (协议单位 -> 物理单位 度)
-    m_deviceStatus.vlFovX = (double)m_pic_up_realtime_state.VIshichang_X / 100.0;
-    m_deviceStatus.vlFovY = (double)m_pic_up_realtime_state.VIshichang_Y / 100.0;
-    m_deviceStatus.irFovX = (double)m_pic_up_realtime_state.IRshichang_X / 100.0;
-    m_deviceStatus.irFovY = (double)m_pic_up_realtime_state.IRshichang_Y / 100.0;
+    // 俯仰角钳制 (假设物理极限是 -90 到 +90，防止异常值)
+    double rawEl = (double)m_pic_up_realtime_state.fy / 1000.0;
+    m_deviceStatus.pitch = qBound(-90.0, rawEl, 90.0);
+
+    // 3. 视场角映射 (防止除以0或负数)
+    m_deviceStatus.vlFovX = qMax(0.0, (double)m_pic_up_realtime_state.VIshichang_X / 100.0);
+    m_deviceStatus.vlFovY = qMax(0.0, (double)m_pic_up_realtime_state.VIshichang_Y / 100.0);
+    m_deviceStatus.irFovX = qMax(0.0, (double)m_pic_up_realtime_state.IRshichang_X / 100.0);
+    m_deviceStatus.irFovY = qMax(0.0, (double)m_pic_up_realtime_state.IRshichang_Y / 100.0);
 
     // 4. 跟踪状态
     m_deviceStatus.isTrackingVL = (m_pic_up_realtime_state.dsp1_mode != 0);
     m_deviceStatus.isTrackingIR = (m_pic_up_realtime_state.dsp2_mode != 0);
 
-    // 5. 测距信息
-    m_deviceStatus.laserDistance = m_pic_up_realtime_state.fake_distance;
+    // 5. 测距信息 (清洗异常距离值)
+    double dist = m_pic_up_realtime_state.fake_distance;
+    if (dist < 0 || dist > 50000) { // 假设最大测距 50km
+        m_deviceStatus.laserDistance = 0.0;
+    }
+    else {
+        m_deviceStatus.laserDistance = dist;
+    }
     m_deviceStatus.laserErrorCode = m_pic_up_realtime_state.error_distance;
 
-    // 6. 焦距信息 (原代码逻辑: 发送值 = VIfocuesValue / 100)
+    // 6. 焦距信息
     m_deviceStatus.vlFocalLength = m_pic_up_realtime_state.VIfocuesValue / 100;
     m_deviceStatus.irFocalLength = m_pic_up_realtime_state.IRfocuesValue / 100;
 
@@ -434,7 +447,7 @@ void fzqjMain_user::mapProtocolToStatus()
     m_deviceStatus.aiSizeVL = m_pic_up_realtime_state.ai_vi_size;
     m_deviceStatus.aiSizeIR = m_pic_up_realtime_state.ai_ir_size;
 
-    // 8. 跟踪目标原始数据 (用于计算GPS)
+    // 8. 跟踪目标原始数据
     m_deviceStatus.vlTargetRawAz = m_pic_up_realtime_state.dsp1_target_fw;
     m_deviceStatus.vlTargetRawEl = m_pic_up_realtime_state.dsp1_target_fy;
     m_deviceStatus.irTargetRawAz = m_pic_up_realtime_state.dsp2_target_fw;
@@ -462,6 +475,7 @@ void fzqjMain_user::UpdateRealTimeState(void)
     // 使用 double 直接显示，无需再除以 1000
     ui.lb_sf_fw_2->setText(QString::number(m_deviceStatus.azimuth, 'f', 3));
     ui.lb_sf_fy_2->setText(QString::number(m_deviceStatus.pitch, 'f', 3));
+	m_laserController->updateCurrentPosition(m_deviceStatus.azimuth, m_deviceStatus.pitch); // 将最新位置推送给 Controller 用于禁区判断
 
     // 2. 视场角
     QString vi_x = QString::number(m_deviceStatus.vlFovX, 'f', 2);
@@ -554,36 +568,41 @@ void fzqjMain_user::UpdateRealTimeState(void)
 
 void fzqjMain_user::UpdateSelfCheckState(void)
 {
-	//状态灯-待更新
-	ui.label_vi->setStates(m_pic_up_selfcheck_state.ccdState ? QSimpleLed::ON : QSimpleLed::OFF);
-	ui.label_vi->mColor = m_pic_up_selfcheck_state.ccdState ? QSimpleLed::GREEN : QSimpleLed::GREY;
-	ui.label_ir->setStates(m_pic_up_selfcheck_state.irState ? QSimpleLed::ON : QSimpleLed::OFF);
-	ui.label_ir->mColor = m_pic_up_selfcheck_state.irState ? QSimpleLed::GREEN : QSimpleLed::GREY;
-	ui.label_sf->setStates(m_pic_up_selfcheck_state.sfState ? QSimpleLed::ON : QSimpleLed::OFF);
-	ui.label_sf->mColor = m_pic_up_selfcheck_state.sfState ? QSimpleLed::GREEN : QSimpleLed::GREY;
-	ui.label_cj->setStates(m_pic_up_selfcheck_state.distanceState ? QSimpleLed::ON : QSimpleLed::OFF);
-	ui.label_cj->mColor = m_pic_up_selfcheck_state.distanceState ? QSimpleLed::GREEN : QSimpleLed::GREY;
-	if (m_bLaserDisStart)
-	{
-		if (dis_start_index < 10)
-		{
-			dis_start_index++;
-			ui.label_cj->mColor = QSimpleLed::GREY;
-		}
-		else if (10 < dis_start_index < 30)
-		{
-			ui.label_cj->mColor = QSimpleLed::GREEN;
-			dis_start_index++;
-		}
-		else
-		{
-			dis_start_index = 0;
-		}
-	}
-	else
-	{
-		//
-	}
+    // 状态灯 - 硬件状态
+    ui.label_vi->setStates(m_pic_up_selfcheck_state.ccdState ? QSimpleLed::ON : QSimpleLed::OFF);
+    ui.label_vi->mColor = m_pic_up_selfcheck_state.ccdState ? QSimpleLed::GREEN : QSimpleLed::GREY;
+
+    ui.label_ir->setStates(m_pic_up_selfcheck_state.irState ? QSimpleLed::ON : QSimpleLed::OFF);
+    ui.label_ir->mColor = m_pic_up_selfcheck_state.irState ? QSimpleLed::GREEN : QSimpleLed::GREY;
+
+    ui.label_sf->setStates(m_pic_up_selfcheck_state.sfState ? QSimpleLed::ON : QSimpleLed::OFF);
+    ui.label_sf->mColor = m_pic_up_selfcheck_state.sfState ? QSimpleLed::GREEN : QSimpleLed::GREY;
+
+    ui.label_cj->setStates(m_pic_up_selfcheck_state.distanceState ? QSimpleLed::ON : QSimpleLed::OFF);
+    ui.label_cj->mColor = m_pic_up_selfcheck_state.distanceState ? QSimpleLed::GREEN : QSimpleLed::GREY;
+
+    // 使用新变量实现闪烁逻辑
+    if (m_isUI_LaserActive)
+    {
+        if (m_ui_laserAnimIndex < 10)
+        {
+            m_ui_laserAnimIndex++;
+            ui.label_cj->mColor = QSimpleLed::GREY;
+        }
+        else if (m_ui_laserAnimIndex > 10 && m_ui_laserAnimIndex < 30)
+        {
+            ui.label_cj->mColor = QSimpleLed::GREEN;
+            m_ui_laserAnimIndex++;
+        }
+        else
+        {
+            m_ui_laserAnimIndex = 0;
+        }
+    }
+    else
+    {
+        // 没测距时保持原样
+    }
 }
 
 void fzqjMain_user::UpdateFKDevState(void)
@@ -879,47 +898,6 @@ void fzqjMain_user::SetDevDateTime(void)
 	m_xk_down_msg.msg_type = E_FK_BUTT;
 }
 
-int fzqjMain_user::t_SF_Stop(void)
-{
-	Sleep(100);
-	m_xk_down_msg.msg_type = E_FK_SF_MOVE;
-	m_xk_down_msg.param_1 = 0;
-	m_xk_down_msg.param_2 = 0;
-	sendMsg2Pic();
-	m_xk_down_msg.msg_type = E_FK_SF_STOP;
-	sendMsg2Pic();
-	m_xk_down_msg.msg_type = E_FK_BUTT;
-	return 0;
-}
-/**
- * @brief 判断当前方位俯仰是否在禁止区域内
- * @param current_azimuth 当前方位角（0-360度）
- * @param current_elevation 当前俯仰角
- * @param az_start 禁止区域方位起始角
- * @param az_end 禁止区域方位终止角
- * @param el_start 禁止区域俯仰起始角
- * @param el_end 禁止区域俯仰终止角
- * @return true 在禁止区域内，false 不在禁止区域内
- */
-bool fzqjMain_user::isInNoZone(float current_azimuth, float current_elevation, float az_start, float az_end, float el_start, float el_end)
-{
-	// 检查俯仰角是否在范围内
-	bool in_elevation = (current_elevation >= el_start) && (current_elevation <= el_end);
-
-	// 检查方位角是否在范围内
-	bool in_azimuth;
-	if (az_start <= az_end) {
-		// 正常情况（不跨越0°）
-		in_azimuth = (current_azimuth >= az_start) && (current_azimuth <= az_end);
-	}
-	else {
-		// 跨越0°的情况（如 340°~20°）
-		in_azimuth = (current_azimuth >= az_start) || (current_azimuth <= az_end);
-	}
-
-	// 同时满足方位和俯仰条件才返回 true
-	return in_azimuth && in_elevation;
-}
 HEALTH_CTL_MSG fzqjMain_user::getWatchDogMsg(int state)
 {
 	HEALTH_CTL_MSG message;
@@ -1067,7 +1045,7 @@ void fzqjMain_user::OnRecvFKData(QByteArray data)
 				switch (m_fk_down_ztCntrol.ContrlTurnl)
 				{
 				case 0://停止运动
-					sendSFshache();
+					m_gimbalController->stopMove();
 					break;
 				case 1://向左运动
 					on_btnLeft_pressed();//左
@@ -1195,20 +1173,6 @@ void fzqjMain_user::OnTimeOut30000(void)
 
 void fzqjMain_user::OnTimeOut1000(void)
 {
-	//连续激光测距
-	if (m_bLaserDisStart)
-	{
-		float current_fw = m_pic_up_realtime_state.fw / 1000;
-		float current_fy = m_pic_up_realtime_state.fy / 1000;
-		bool ret = isInNoZone(current_fw, current_fy, m_xk_configinfo.laser_forbid_fw_start,
-			m_xk_configinfo.laser_forbid_fw_stop, m_xk_configinfo.laser_forbid_fy_start, m_xk_configinfo.laser_forbid_fy_stop);
-		if (!ret)
-		{
-			on_btn_start_1_dis_2_clicked();
-		}
-		
-		av_usleep(10);
-	}
 	if (b_pingPic == true)
 	{
 		//上报心跳
@@ -1610,117 +1574,53 @@ void fzqjMain_user::OnRecvData(QByteArray data)
 
 	//qDebug()<<sizeof(DcMsgUp);
 }
-float fzqjMain_user::degToRad(float deg)
-{
-	return deg * (M_PI / 180.0);
-}
-float fzqjMain_user::radToDeg(float rad)
-{
-	return rad * ( 180.0/ M_PI);
-}
+
 void fzqjMain_user::OnScreenClick_VL_left(int x, int y)
 {
-	if (m_pic_up_realtime_state.dsp1_mode || m_pic_up_realtime_state.dsp2_mode)
-	{
-		qDebug() << QStringLiteral("伺服在跟踪状态！误操作");
-		return;
-	}
-	if (m_pic_up_realtime_state.VIshichang_X > 4000 | m_pic_up_realtime_state.VIshichang_X < 10)
-	{
-		return;
-	}
-	m_xk_down_msg.msg_type = E_FK_SF_MOVE_TO;
-	int width = ui.label_videodisplay_vl->width();
-	int height = ui.label_videodisplay_vl->height();
-	float fov_x = m_pic_up_realtime_state.VIshichang_X / 100.0;
-	float fov_y = m_pic_up_realtime_state.VIshichang_Y / 100.0;
-	//float fov_x = 3.29;
-	//float fov_y = 1.85;
-	float current_fw = m_pic_up_realtime_state.fw/1000.0;
-	float current_fy = m_pic_up_realtime_state.fy/1000.0;
+    if (m_deviceStatus.isTrackingVL || m_deviceStatus.isTrackingIR) return;
+    if (m_deviceStatus.vlFovX > 40.0 || m_deviceStatus.vlFovX < 0.1) return; // 简单校验
 
-	double diff_x;
-	double diff_y;
-	calculateDeltaAngles(x, y, width, height, 1920, 1080, fov_x, fov_y, current_fw, current_fy,diff_x, diff_y);
-	diff_x = diff_x * 1000;
+    int width = ui.label_videodisplay_vl->width();
+    int height = ui.label_videodisplay_vl->height();
 
-	diff_y = diff_y * 1000;
-	if (diff_x > 360000)
-	{
-		diff_x -= 360000;
-	}
-	if (diff_x < 0)
-	{
-		diff_x += 360000;
-	}
+    double diff_x, diff_y;
+    // 调用 Controller 的静态算法
+    GimbalController::calculateDeltaAngles(
+        x, y, width, height,
+        1920, 1080, // 相机分辨率
+        m_deviceStatus.vlFovX, m_deviceStatus.vlFovY,
+        0, 0, // theta_0, phi_0 (计算相对量不需要)
+        diff_x, diff_y
+    );
 
-	//double realx = x * picLeftPraW / (double)width;
-	//double realy = y * picLeftPraH / (double)height;
-	//float realfw = (realx - picLeftPraW / 2) / picLeftPraW * (m_pic_up_realtime_state.VIshichang_X * 10);
-	//float realfy = (realy - picLeftPraH / 2) / picLeftPraH * (m_pic_up_realtime_state.VIshichang_Y * 10);
-	//int fw = m_pic_up_realtime_state.fw + realfw;
-	//int fy = m_pic_up_realtime_state.fy - realfy;
-	//if (fw > 360000)
-	//{
-	//	fw -= 360000;
-	//}
-	//if (fw < 0)
-	//{
-	//	fw += 360000;
-	//}
-	m_xk_down_msg.param_1 = diff_x;
-	m_xk_down_msg.param_2 = diff_y;
-	sendMsg2Pic();
-	m_xk_down_msg.msg_type = E_FK_BUTT;
-	QString str = QStringLiteral("转台-移动到点选位置");
-	ShowLineText(0, 0, str);
-	//DSP检测指定位置
-	m_xk_down_msg.msg_type = E_FK_AUTO_DETECT_ONE_VL;
-	m_xk_down_msg.param_1 = 960;
-	m_xk_down_msg.param_2 = 540;
-	sendMsg2Pic();
-	m_xk_down_msg.msg_type = E_FK_BUTT;
-	b_yaogan_mainCamera = false;
-	SetMainCamera(b_yaogan_mainCamera);
-	ui.lb_mainvideo->setText(QStringLiteral("可见光"));
-	is_main_camera = 0;
+    // 转换为协议单位 (0.001度)
+    int deltaAz = (int)(diff_x * 1000);
+    int deltaEl = (int)(diff_y * 1000);
+
+    // 数据清洗逻辑 (原代码有)
+    if (deltaAz > 360000) deltaAz -= 360000;
+    if (deltaAz < 0) deltaAz += 360000;
+
+    m_gimbalController->moveRelative(deltaAz, deltaEl);
+
+    QString str = QStringLiteral("转台-移动到点选位置");
+    ShowLineText(0, 0, str);
+
+    // 后续逻辑 (DSP检测指定位置) 暂时保留或移入 CameraController
+    m_xk_down_msg.msg_type = E_FK_AUTO_DETECT_ONE_VL;
+    m_xk_down_msg.param_1 = 960;
+    m_xk_down_msg.param_2 = 540;
+    sendMsg2Pic();
+    m_xk_down_msg.msg_type = E_FK_BUTT;
+
+    // 切换相机状态逻辑
+    b_yaogan_mainCamera = false;
+    SetMainCamera(b_yaogan_mainCamera);
+    ui.lb_mainvideo->setText(QStringLiteral("可见光"));
+    is_main_camera = 0;
 }
 
-void fzqjMain_user::calculateDeltaAngles(
-	double u_d, double v_d, // 鼠标点击位置在显示框中的坐标
-	double W_d, double H_d, // 显示框的宽高
-	double W, double H, // 相机分辨率
-	double fov_h, double fov_v, // 相机的水平和垂直视场角（度）
-	double theta_0, double phi_0, // 当前方位角和俯仰角（度）
-	double& deltaTheta, double& deltaPhi // 输出的跳转角度（度）
-) {
-	// 将显示框坐标转换为图像坐标
-	double u = (u_d / W_d) * W;
-	double v = (v_d / H_d) * H;
 
-	// 计算点击位置相对于图像中心的偏移量
-	double delta_u = u - W / 2;
-	double delta_v = v - H / 2;
-
-	// 将视场角从度转换为弧度
-	double fov_h_rad = degToRad(fov_h);
-	double fov_v_rad = degToRad(fov_v);
-
-	// 归一化处理
-	double norm_u = delta_u / (W / 2);
-	double norm_v = delta_v / (H / 2);
-
-	// 计算点击位置的方向角度（透视投影修正）
-	double theta_click = atan2(norm_u, 1 / tan(fov_h_rad / 2));
-	double phi_click = -atan2(norm_v, 1 / tan(fov_v_rad / 2));
-
-	// 计算新的方位角和俯仰角
-	double theta_new = degToRad(theta_0) + theta_click;
-	double phi_new = degToRad(phi_0) + phi_click;
-
-	deltaTheta = radToDeg(theta_new);
-	deltaPhi = radToDeg(phi_new);
-}
 void fzqjMain_user::OnScreenClick_VL_Right(int x, int y)
 {
 	if (m_pic_up_realtime_state.dsp1_mode)
@@ -1749,71 +1649,57 @@ void fzqjMain_user::OnScreenClick_VL_Right(int x, int y)
 
 void fzqjMain_user::OnScreenClick_IR_left(int x, int y)
 {
-	if (m_pic_up_realtime_state.dsp1_mode || m_pic_up_realtime_state.dsp2_mode)
-	{
-		qDebug() << QStringLiteral("伺服在跟踪状态！误操作");
-		return;
-	}
-	if (m_pic_up_realtime_state.IRshichang_X > 800 | m_pic_up_realtime_state.IRshichang_X < 10)
-	{
-		return;
-	}
-	m_xk_down_msg.msg_type = E_FK_SF_MOVE_TO;
-	//int width = ui.label_videodisplay_ir->width();
-	//int height = ui.label_videodisplay_ir->height();
-	//double realx = x * 640 / (double)width;
-	//double realy = y * 512 / (double)height;
-	//float realfw = (realx - 640 / 2) / 640 * (m_pic_up_realtime_state.IRshichang_X * 10);
-	//float realfy = (realy - 512 / 2) / 512 * (m_pic_up_realtime_state.IRshichang_Y * 10);
-	//int fw = m_pic_up_realtime_state.fw + realfw;
-	//int fy = m_pic_up_realtime_state.fy - realfy;
-	//if (fw > 360000)
-	//{
-	//	fw -= 360000;
-	//}
-	//if (fw < 0)
-	//{
-	//	fw += 360000;
-	//}
-	int width = ui.label_videodisplay_ir->width();
-	int height = ui.label_videodisplay_ir->height();
-	float fov_x = m_pic_up_realtime_state.IRshichang_X / 100.0;
-	float fov_y = m_pic_up_realtime_state.IRshichang_Y / 100.0;
-	//float fov_x = 3.29;
-	//float fov_y = 1.85;
-	float current_fw = m_pic_up_realtime_state.fw / 1000.0;
-	float current_fy = m_pic_up_realtime_state.fy / 1000.0;
+    // 1. 跟踪状态检查
+    if (m_deviceStatus.isTrackingVL || m_deviceStatus.isTrackingIR) {
+        qDebug() << QStringLiteral("伺服在跟踪状态！误操作");
+        return;
+    }
 
-	double diff_x;
-	double diff_y;
-	calculateDeltaAngles(x, y, width, height, 640, 512, fov_x, fov_y, current_fw, current_fy, diff_x, diff_y);
-	diff_x = diff_x * 1000;
+    // 2. 视场角合法性校验 
+    if (m_deviceStatus.irFovX > 8.0 || m_deviceStatus.irFovX < 0.1) {
+        return;
+    }
 
-	diff_y = diff_y * 1000;
-	if (diff_x > 360000)
-	{
-		diff_x -= 360000;
-	}
-	if (diff_x < 0)
-	{
-		diff_x += 360000;
-	}
-	m_xk_down_msg.param_1 = diff_x;
-	m_xk_down_msg.param_2 = diff_y;
-	sendMsg2Pic();
-	m_xk_down_msg.msg_type = E_FK_BUTT;
-	QString str = QStringLiteral("转台-移动到点选位置");
-	ShowLineText(0, 0, str);
-	//DSP检测指定位置
-	m_xk_down_msg.msg_type = E_FK_AUTO_DETECT_ONE_IR;
-	m_xk_down_msg.param_1 = 320;
-	m_xk_down_msg.param_2 = 256;
-	sendMsg2Pic();
-	m_xk_down_msg.msg_type = E_FK_BUTT;
-	b_yaogan_mainCamera = true;
-	SetMainCamera(b_yaogan_mainCamera);
-	ui.lb_mainvideo->setText(QStringLiteral("红外"));
-	is_main_camera = 1;
+    int width = ui.label_videodisplay_ir->width();
+    int height = ui.label_videodisplay_ir->height();
+
+    double diff_x, diff_y;
+    // 3. 调用 Controller 的静态算法 (注意 IR 分辨率为 640, 512)
+    GimbalController::calculateDeltaAngles(
+        x, y, width, height,
+        640, 512, // 红外相机分辨率
+        m_deviceStatus.irFovX, m_deviceStatus.irFovY,
+        0, 0, // theta_0, phi_0 (计算相对量不需要)
+        diff_x, diff_y
+    );
+
+    // 4. 转换为协议单位 (0.001度)
+    int deltaAz = (int)(diff_x * 1000);
+    int deltaEl = (int)(diff_y * 1000);
+
+    // 5. 数据清洗逻辑 (防止越界)
+    if (deltaAz > 360000) deltaAz -= 360000;
+    if (deltaAz < 0) deltaAz += 360000;
+
+    // 6. 执行相对移动
+    m_gimbalController->moveRelative(deltaAz, deltaEl);
+
+    QString str = QStringLiteral("转台-移动到点选位置");
+    ShowLineText(0, 0, str);
+
+    // 7. 后续逻辑: DSP检测指定位置 (IR 中心点)
+    // 暂时保留 sendMsg2Pic，后续可移入 CameraController
+    m_xk_down_msg.msg_type = E_FK_AUTO_DETECT_ONE_IR;
+    m_xk_down_msg.param_1 = 320;
+    m_xk_down_msg.param_2 = 256;
+    sendMsg2Pic();
+    m_xk_down_msg.msg_type = E_FK_BUTT;
+
+    // 8. 切换相机状态逻辑 (设置为红外主摄)
+    b_yaogan_mainCamera = true;
+    SetMainCamera(b_yaogan_mainCamera);
+    ui.lb_mainvideo->setText(QStringLiteral("红外"));
+    is_main_camera = 1;
 }
 
 void fzqjMain_user::OnScreenClick_IR_Right(int x, int y)
@@ -2185,281 +2071,205 @@ void fzqjMain_user::on_btn_manual_target_send_clicked(void)
 
 void fzqjMain_user::on_btn_stop_dis_2_clicked(void)
 {
-	//关闭定时器-关闭连续测距使能
-	m_bLaserDisStart = false;
-	ui.btn_start_more_dis->setText(QStringLiteral("连续测距"));
-	SetBtnHighLight(ui.btn_start_more_dis, false);
-	ui.btn_start_1_dis_2->setEnabled(false);
-	ui.btn_start_more_dis->setEnabled(false);
+	m_laserController->setContinuousRanging(false);
+}
+
+void fzqjMain_user::onLaserContinuousChanged(bool active)
+{
+    // 同步状态到 UI 变量
+    m_isUI_LaserActive = active;
+
+    if (active) {
+        ui.btn_start_more_dis->setText(QStringLiteral("测距中.."));
+        SetBtnHighLight(ui.btn_start_more_dis, true);
+    }
+    else {
+        ui.btn_start_more_dis->setText(QStringLiteral("连续测距"));
+        SetBtnHighLight(ui.btn_start_more_dis, false);
+        ui.btn_start_1_dis_2->setEnabled(true);
+        ui.btn_start_more_dis->setEnabled(true);
+
+        // 停止时重置计数器
+        m_ui_laserAnimIndex = 0;
+        ui.label_cj->mColor = QSimpleLed::GREY; // 恢复灰色
+    }
 }
 
 void fzqjMain_user::on_btn_start_1_dis_2_clicked(void)
 {
 	QString str = QStringLiteral("激光测距-单次测距");
 	ShowLineText(0, 0, str);
-	m_xk_down_msg.msg_type = E_FK_LASER_RANGING_ONE;
-	sendMsg2Pic();
-	m_xk_down_msg.msg_type = E_FK_BUTT;
+	m_laserController->startSingleRanging();
 }
+
 void fzqjMain_user::on_btn_start_more_dis_clicked(void)//5hz
 {
-	if (!m_bLaserDisStart)
-	{
-		//打开定时器-打开连续测距使能
-		m_bLaserDisStart = true;
-		//按钮高亮
-		ui.btn_start_more_dis->setText(QStringLiteral("测距中.."));
-		SetBtnHighLight(ui.btn_start_more_dis, true);
-		QString str = QStringLiteral("激光测距-连续测距-开始");
-		ShowLineText(0, 0, str);
-	}
-	else
-	{
-		//关闭定时器-关闭连续测距使能
-		QString str = QStringLiteral("激光测距-连续测距-结束");
-		ShowLineText(0, 0, str);
-		m_bLaserDisStart = false;
-		ui.btn_start_more_dis->setText(QStringLiteral("连续测距"));
-		SetBtnHighLight(ui.btn_start_more_dis, false);
-	}
+    bool isCurrentlyActive = (ui.btn_start_more_dis->text() == QStringLiteral("测距中.."));
+
+    if (!isCurrentlyActive) {
+        m_laserController->setContinuousRanging(true);
+        ShowLineText(0, 0, QStringLiteral("激光测距-连续测距-开始"));
+    }
+    else {
+        m_laserController->setContinuousRanging(false);
+        ShowLineText(0, 0, QStringLiteral("激光测距-连续测距-结束"));
+    }
 }
 
 void fzqjMain_user::on_btnMid_pressed(void)
 {
-	if (m_pic_up_realtime_state.dsp1_mode || m_pic_up_realtime_state.dsp2_mode)
-	{
-		qDebug() << QStringLiteral("伺服在跟踪状态！误操作");
-		return;
-	}
-	m_xk_down_msg.msg_type = E_FK_SF_MOVE_TO;
-	m_xk_down_msg.param_1 = m_pic_up_realtime_state.fw;
-	m_xk_down_msg.param_2 = m_pic_up_realtime_state.fy;
-	sendMsg2Pic();
-	m_xk_down_msg.msg_type = E_FK_BUTT;
+    if (m_deviceStatus.isTrackingVL || m_deviceStatus.isTrackingIR) return;
+    m_gimbalController->moveToAbsolute((int)(m_deviceStatus.azimuth * 1000), (int)(m_deviceStatus.pitch * 1000));
 }
 
 void fzqjMain_user::on_btnMid_released(void)
 {
-	m_xk_down_msg.msg_type = E_FK_BUTT;
+
 }
 
 void fzqjMain_user::on_btn_sf_stop_clicked(void)
 {
-	QString str = QStringLiteral("伺服转台-刹车");
-	ShowLineText(0, 0, str);
-	if (m_pic_up_realtime_state.dsp1_mode || m_pic_up_realtime_state.dsp2_mode)
-	{
-		m_xk_down_msg.msg_type = E_FK_EXIT_TRACK;
-		sendMsg2Pic();
-		m_xk_down_msg.msg_type = E_FK_BUTT;
-	}
-	m_xk_down_msg.msg_type = E_FK_SF_STOP;
-	sendMsg2Pic();
-	m_xk_down_msg.msg_type = E_FK_BUTT;
+    QString str = QStringLiteral("伺服转台-刹车");
+    ShowLineText(0, 0, str);
+    if (m_deviceStatus.isTrackingVL || m_deviceStatus.isTrackingIR)
+    {
+        // 退出跟踪指令... (这是跟踪模块的事，暂时直接发或不动)
+        m_xk_down_msg.msg_type = E_FK_EXIT_TRACK;
+        sendMsg2Pic();
+    }
+    m_gimbalController->stopMove();
 }
 
 void fzqjMain_user::on_btnLT_pressed(void)
 {
-	QString str = QStringLiteral("转台-左上运动-开始");
-	ShowLineText(0, 0, str);
-	if (m_pic_up_realtime_state.dsp1_mode || m_pic_up_realtime_state.dsp2_mode)
-	{
-		qDebug() << QStringLiteral("伺服在跟踪状态！误操作");
-		return;
-	}
-	float xspeed = (float)ui.Slider_speedx->value();
-	float yspeed = (float)ui.Slider_speedy->value();
-	int16_t _x = -1 * xspeed;
-	int16_t _y = yspeed;
-	m_xk_down_msg.msg_type = E_FK_SF_MOVE;
-	m_xk_down_msg.param_1 = _x;
-	m_xk_down_msg.param_2 = _y;
-	sendMsg2Pic();
+    QString str = QStringLiteral("转台-左上运动-开始");
+    ShowLineText(0, 0, str);
+    if (m_deviceStatus.isTrackingVL || m_deviceStatus.isTrackingIR) return;
+
+    float xspeed = (float)ui.Slider_speedx->value();
+    float yspeed = (float)ui.Slider_speedy->value();
+    m_gimbalController->startMove(-xspeed, yspeed);
 }
 
 void fzqjMain_user::on_btnLT_released(void)
 {
-	sendSFshache();
-	QString str = QStringLiteral("转台-左上运动-结束");
-	ShowLineText(0, 0, str);
+    m_gimbalController->stopMove();
+    ShowLineText(0, 0, QStringLiteral("转台-向上运动-结束"));
 }
 
 void fzqjMain_user::on_btnTop_pressed(void)
 {
-	QString str = QStringLiteral("转台-向上运动-开始");
-	ShowLineText(0, 0, str);
-	if (m_pic_up_realtime_state.dsp1_mode || m_pic_up_realtime_state.dsp2_mode)
-	{
-		qDebug() << QStringLiteral("伺服在跟踪状态！误操作");
-		return;
-	}
-	float yspeed = (float)ui.Slider_speedy->value();
-	int16_t _x = 0;
-	int16_t _y = yspeed;
-	m_xk_down_msg.msg_type = E_FK_SF_MOVE;
-	m_xk_down_msg.param_1 = _x;
-	m_xk_down_msg.param_2 = _y;
-	sendMsg2Pic();
+    QString str = QStringLiteral("转台-向上运动-开始");
+    ShowLineText(0, 0, str);
+    if (m_deviceStatus.isTrackingVL || m_deviceStatus.isTrackingIR) return;
+
+    float yspeed = (float)ui.Slider_speedy->value();
+    m_gimbalController->startMove(0, yspeed);
 }
 
 void fzqjMain_user::on_btnTop_released(void)
 {
-	sendSFshache();
-	QString str = QStringLiteral("转台-向上运动-结束");
-	ShowLineText(0, 0, str);
+    m_gimbalController->stopMove();
+    ShowLineText(0, 0, QStringLiteral("转台-向上运动-结束"));
 }
 
 void fzqjMain_user::on_btnRT_pressed(void)
 {
-	QString str = QStringLiteral("转台-右上运动-开始");
-	ShowLineText(0, 0, str);
-	if (m_pic_up_realtime_state.dsp1_mode || m_pic_up_realtime_state.dsp2_mode)
-	{
-		qDebug() << QStringLiteral("伺服在跟踪状态！误操作");
-		return;
-	}
-	float xspeed = (float)ui.Slider_speedx->value();
-	float yspeed = (float)ui.Slider_speedy->value();
-	int16_t _x = 1 * xspeed;
-	int16_t _y = 1 * yspeed;
-	m_xk_down_msg.msg_type = E_FK_SF_MOVE;
-	m_xk_down_msg.param_1 = _x;
-	m_xk_down_msg.param_2 = _y;
-	sendMsg2Pic();
+    QString str = QStringLiteral("转台-右上运动-开始");
+    ShowLineText(0, 0, str);
+    if (m_deviceStatus.isTrackingVL || m_deviceStatus.isTrackingIR) return;
+
+    float xspeed = (float)ui.Slider_speedx->value();
+    float yspeed = (float)ui.Slider_speedy->value();
+    m_gimbalController->startMove(-xspeed, yspeed);
 }
 
 void fzqjMain_user::on_btnRT_released(void)
 {
-	sendSFshache();
-	QString str = QStringLiteral("转台-右上运动-结束");
-	ShowLineText(0, 0, str);
+    m_gimbalController->stopMove();
+    ShowLineText(0, 0, QStringLiteral("转台-右上运动-结束"));
 }
 
 void fzqjMain_user::on_btnRight_pressed(void)
 {
 	QString str = QStringLiteral("转台-向右运动-开始");
-	ShowLineText(0, 0, str);
-	if (m_pic_up_realtime_state.dsp1_mode || m_pic_up_realtime_state.dsp2_mode)
-	{
-		qDebug() << QStringLiteral("伺服在跟踪状态！误操作");
-		return;
-	}
-	float xspeed = (float)ui.Slider_speedx->value();
-	int16_t _x = 1 * xspeed;
-	int16_t _y = 0;
-	m_xk_down_msg.msg_type = E_FK_SF_MOVE;
-	m_xk_down_msg.param_1 = _x;
-	m_xk_down_msg.param_2 = _y;
-	sendMsg2Pic();
+    ShowLineText(0, 0, str);
+    if (m_deviceStatus.isTrackingVL || m_deviceStatus.isTrackingIR) return;
+    
+    float xspeed = (float)ui.Slider_speedx->value();
+    m_gimbalController->startMove(xspeed, 0);
 }
 
 void fzqjMain_user::on_btnRight_released(void)
 {
-	sendSFshache();
-	QString str = QStringLiteral("转台-向右运动-结束");
-	ShowLineText(0, 0, str);
+    m_gimbalController->stopMove();
+    ShowLineText(0, 0, QStringLiteral("转台-向右运动-结束"));
 }
 
 void fzqjMain_user::on_btnRB_pressed(void)
 {
-	QString str = QStringLiteral("转台-右下运动-开始");
-	ShowLineText(0, 0, str);
-	if (m_pic_up_realtime_state.dsp1_mode || m_pic_up_realtime_state.dsp2_mode)
-	{
-		qDebug() << QStringLiteral("伺服在跟踪状态！误操作");
-		return;
-	}
-	float xspeed = (float)ui.Slider_speedx->value();
-	float yspeed = (float)ui.Slider_speedy->value();
-	int16_t _x = 1 * xspeed;
-	int16_t _y = -1 * yspeed;
-	m_xk_down_msg.msg_type = E_FK_SF_MOVE;
-	m_xk_down_msg.param_1 = _x;
-	m_xk_down_msg.param_2 = _y;
-	sendMsg2Pic();
+    QString str = QStringLiteral("转台-右下运动-开始");
+    ShowLineText(0, 0, str);
+    if (m_deviceStatus.isTrackingVL || m_deviceStatus.isTrackingIR) return;
+
+    float xspeed = (float)ui.Slider_speedx->value();
+    float yspeed = (float)ui.Slider_speedy->value();
+    m_gimbalController->startMove(-xspeed, yspeed);
 }
 
 void fzqjMain_user::on_btnRB_released(void)
 {
-	sendSFshache();
-	QString str = QStringLiteral("转台-右下运动-结束");
-	ShowLineText(0, 0, str);
+    m_gimbalController->stopMove();
+    ShowLineText(0, 0, QStringLiteral("转台-右下运动-结束"));
 }
 
 void fzqjMain_user::on_btnBottom_pressed(void)
 {
-	QString str = QStringLiteral("转台-向下运动-开始");
-	ShowLineText(0, 0, str);
-	if (m_pic_up_realtime_state.dsp1_mode || m_pic_up_realtime_state.dsp2_mode)
-	{
-		qDebug() << QStringLiteral("伺服在跟踪状态！误操作");
-		return;
-	}
-	float yspeed = (float)ui.Slider_speedy->value();
-	int16_t _x = 0;
-	int16_t _y = -1 * yspeed;
-	m_xk_down_msg.msg_type = E_FK_SF_MOVE;
-	m_xk_down_msg.param_1 = _x;
-	m_xk_down_msg.param_2 = _y;
-	sendMsg2Pic();
+    QString str = QStringLiteral("转台-向下运动-开始");
+    ShowLineText(0, 0, str);
+    if (m_deviceStatus.isTrackingVL || m_deviceStatus.isTrackingIR) return;
+
+    float yspeed = (float)ui.Slider_speedy->value();
+    m_gimbalController->startMove(0, -yspeed);
 }
 
 void fzqjMain_user::on_btnBottom_released(void)
 {
-	sendSFshache();
-	QString str = QStringLiteral("转台-向下运动-结束");
-	ShowLineText(0, 0, str);
+    m_gimbalController->stopMove();
+    ShowLineText(0, 0, QStringLiteral("转台-向下运动-结束"));
 }
 
 void fzqjMain_user::on_btnLB_pressed(void)
 {
-	QString str = QStringLiteral("转台-左下运动-开始");
-	ShowLineText(0, 0, str);
-	if (m_pic_up_realtime_state.dsp1_mode || m_pic_up_realtime_state.dsp2_mode)
-	{
-		qDebug() << QStringLiteral("伺服在跟踪状态！误操作");
-		return;
-	}
-	float xspeed = (float)ui.Slider_speedx->value();
-	float yspeed = (float)ui.Slider_speedy->value();
-	int16_t _x = -1 * xspeed;
-	int16_t _y = -1 * yspeed;
-	m_xk_down_msg.msg_type = E_FK_SF_MOVE;
-	m_xk_down_msg.param_1 = _x;
-	m_xk_down_msg.param_2 = _y;
-	sendMsg2Pic();
+    QString str = QStringLiteral("转台-左下运动-开始");
+    ShowLineText(0, 0, str);
+    if (m_deviceStatus.isTrackingVL || m_deviceStatus.isTrackingIR) return;
+
+    float xspeed = (float)ui.Slider_speedx->value();
+    float yspeed = (float)ui.Slider_speedy->value();
+    m_gimbalController->startMove(-xspeed, yspeed);
 }
 
 void fzqjMain_user::on_btnLB_released(void)
 {
-	sendSFshache();
-	QString str = QStringLiteral("转台-左下运动-结束");
-	ShowLineText(0, 0, str);
+    m_gimbalController->stopMove();
+    ShowLineText(0, 0, QStringLiteral("转台-左下运动-结束"));
 }
 
 void fzqjMain_user::on_btnLeft_pressed(void)
 {
-	QString str = QStringLiteral("转台-向左运动-开始");
-	ShowLineText(0, 0, str);
-	if (m_pic_up_realtime_state.dsp1_mode || m_pic_up_realtime_state.dsp2_mode)
-	{
-		qDebug() << QStringLiteral("伺服在跟踪状态！误操作");
-		return;
-	}
-	float xspeed = (float)ui.Slider_speedx->value();
-	int16_t _x = -1 * xspeed;
-	int16_t _y = 0;
-	m_xk_down_msg.msg_type = E_FK_SF_MOVE;
-	m_xk_down_msg.param_1 = _x;
-	m_xk_down_msg.param_2 = _y;
-	sendMsg2Pic();
+    QString str = QStringLiteral("转台-向左运动-开始");
+    ShowLineText(0, 0, str);
+    if (m_deviceStatus.isTrackingVL || m_deviceStatus.isTrackingIR) return;
+
+    float xspeed = (float)ui.Slider_speedx->value();
+    m_gimbalController->startMove(xspeed, 0);
 }
 
 void fzqjMain_user::on_btnLeft_released(void)
 {
-	sendSFshache();
-	QString str = QStringLiteral("转台-向左运动-结束");
-	ShowLineText(0, 0, str);
+    m_gimbalController->stopMove();
+    ShowLineText(0, 0, QStringLiteral("转台-向左运动-结束"));
 }
 
 void fzqjMain_user::btn_vl_black_target(void)
@@ -3473,34 +3283,18 @@ void fzqjMain_user::vi_send_clicked(QByteArray data)
 
 void fzqjMain_user::on_btn_sf_guizhong_clicked(void)
 {
-	QString str = QStringLiteral("转台-运动-归零");
-	ShowLineText(0, 0, str);
-	if (m_pic_up_realtime_state.dsp1_mode || m_pic_up_realtime_state.dsp2_mode)
-	{
-		qDebug() << QStringLiteral("伺服在跟踪状态！误操作");
-		return;
-	}
-	m_xk_down_msg.msg_type = E_FK_SF_RESTORE;
-	sendMsg2Pic();
-	m_xk_down_msg.msg_type = E_FK_BUTT;
+    QString str = QStringLiteral("转台-运动-归零");
+    ShowLineText(0, 0, str);
+    if (m_deviceStatus.isTrackingVL || m_deviceStatus.isTrackingIR) return;
+    m_gimbalController->restoreZero();
 }
 
 void fzqjMain_user::on_btn_sf_shoucang_clicked(void)
 {
-	QString str = QStringLiteral("转台-运动-收藏");
-	ShowLineText(0, 0, str);
-	if (m_pic_up_realtime_state.dsp1_mode || m_pic_up_realtime_state.dsp2_mode)
-	{
-		qDebug() << QStringLiteral("伺服在跟踪状态！误操作");
-		return;
-	}
-	int x = 0 * 1000;
-	int y = -50 * 1000;
-	m_xk_down_msg.msg_type = E_FK_SF_MOVE_TO;
-	m_xk_down_msg.param_1 = x;
-	m_xk_down_msg.param_2 = y;
-	sendMsg2Pic();
-	m_xk_down_msg.msg_type = E_FK_BUTT;
+    QString str = QStringLiteral("转台-运动-收藏");
+    ShowLineText(0, 0, str);
+    if (m_deviceStatus.isTrackingVL || m_deviceStatus.isTrackingIR) return;
+    m_gimbalController->stow();
 }
 
 void fzqjMain_user::pic_improve_close(void)
@@ -3581,41 +3375,81 @@ void fzqjMain_user::on_btn_sf_fwauto_clicked(void)
 
 void fzqjMain_user::on_btn_sf_more_clicked(void)
 {
-	bool Is_Windows_Open = is_windows_open("fzqjSfMore");
-	QString str = QStringLiteral("转台-更多设置-打开");
-	ShowLineText(0, 0, str);
-	if (Is_Windows_Open == false)
-	{
-		return;
-	}
-	else
-	{
-		fzqjSfMore* w = new fzqjSfMore();
-		connect(w, SIGNAL(sig_sf_biaojiao_X()), this, SLOT(sf_biaojiao_X()));
-		connect(w, SIGNAL(sig_sf_biaojiao_Y()), this, SLOT(sf_biaojiao_Y()));
-		connect(w, SIGNAL(sig_sf_shansao(int, int)), this, SLOT(sf_shansao(int, int)));
-		connect(w, SIGNAL(sig_sf_zhousao()), this, SLOT(sf_zhousao()));
-		connect(w, SIGNAL(sig_sf_saomiao_info(int, int, int, int)), this, SLOT(sf_saomiao_info_set(int, int, int, int)));
-		connect(w, SIGNAL(sig_sf_insert(int, int, int)), this, SLOT(sf_insert(int, int, int)));
-		connect(w, SIGNAL(sig_sf_toyzw(int)), this, SLOT(sf_toyzw(int)));
-		connect(w, SIGNAL(sig_sf_delete(int)), this, SLOT(sf_delete(int)));
-		connect(w, SIGNAL(sig_sf_biaojiao_any(int ,int )), this, SLOT(sf_biaojiao_any(int, int )));
-		connect(w, SIGNAL(sig_sf_set_fy_bianjie()), this, SLOT(sf_set_fy_bianjie()));
-		connect(w, SIGNAL(sig_sf_shuyin(double, double)), this, SLOT(sf_shuyin(double, double)));
-		connect(w, SIGNAL(sig_sf_close()), this, SLOT(sf_close()));
-		connect(w, SIGNAL(sig_sf_local_altitude()), this, SLOT(sf_info_local_altitude()));
-		connect(w, SIGNAL(sig_sf_target_altitude()), this, SLOT(sf_info_target_altitude()));
-		connect(w, SIGNAL(sig_target_info_all()), this, SLOT(sf_info_target_all()));
-		connect(w, SIGNAL(sigUpdateBj()), this, SLOT(updateBjFwFy()));
-		connect(this, &fzqjMain_user::sigUpdateSendBjFwFy, w, &fzqjSfMore::SFupdateBjFwFy);
-		connect(this, &fzqjMain_user::sigSendLaserForbidPara, w, &fzqjSfMore::updateLaserForbid);
-		connect(w, &fzqjSfMore::sigAcquireLaserFobid, this, &fzqjMain_user::getLaserForbidPara);
-		connect(w, &fzqjSfMore::sigSetLaserForbid, this, &fzqjMain_user::setLaserForbidPara);
-		connect(w, &fzqjSfMore::sigSFCompensateSet, this, &fzqjMain_user::setSfCompensate);
-		
-		w->setAttribute(Qt::WA_DeleteOnClose, true);
-		w->show();
-	}
+    bool Is_Windows_Open = is_windows_open("fzqjSfMore");
+    QString str = QStringLiteral("转台-更多设置-打开");
+    ShowLineText(0, 0, str);
+
+    if (Is_Windows_Open == false)
+    {
+        return;
+    }
+    else
+    {
+        fzqjSfMore* w = new fzqjSfMore();
+
+        // 1. 方位校准 (参数 2)
+        connect(w, &fzqjSfMore::sig_sf_biaojiao_X, this, [this]() {
+            m_gimbalController->calibrateAzimuth(2);
+            });
+
+        // 2. 俯仰校准 (参数 3)
+        connect(w, &fzqjSfMore::sig_sf_biaojiao_Y, this, [this]() {
+            m_gimbalController->calibrateElevation(3);
+            });
+
+        // 3. 扇扫
+        connect(w, &fzqjSfMore::sig_sf_shansao, m_gimbalController, &GimbalController::startSectorScan);
+
+        // 4. 周扫
+        connect(w, &fzqjSfMore::sig_sf_zhousao, m_gimbalController, &GimbalController::startCircleScan);
+
+        // 5. 扫描参数设置
+        connect(w, &fzqjSfMore::sig_sf_saomiao_info, m_gimbalController, &GimbalController::setScanParams);
+
+        // 6. 预置位设置 (注意参数顺序匹配：num, fw, fy)
+        connect(w, &fzqjSfMore::sig_sf_insert, m_gimbalController, &GimbalController::setPreset);
+
+        // 7. 预置位调用
+        connect(w, &fzqjSfMore::sig_sf_toyzw, m_gimbalController, &GimbalController::goToPreset);
+
+        // 8. 预置位删除
+        connect(w, &fzqjSfMore::sig_sf_delete, m_gimbalController, &GimbalController::deletePreset);
+
+        // 9. 任意点校准
+        connect(w, &fzqjSfMore::sig_sf_biaojiao_any, m_gimbalController, &GimbalController::calibrateAny);
+
+        // 10. 俯仰限位
+        connect(w, &fzqjSfMore::sig_sf_set_fy_bianjie, m_gimbalController, &GimbalController::setElevationLimit);
+
+        // 11. 数引 (UI 传过来的是 double 度数，需要转为 int 千分之一度)
+        connect(w, &fzqjSfMore::sig_sf_shuyin, this, [this](double az, double el) {
+            m_gimbalController->moveToAbsolute((int)(az * 1000), (int)(el * 1000));
+            });
+
+        // 12. 关闭/锁定
+        connect(w, &fzqjSfMore::sig_sf_close, m_gimbalController, &GimbalController::stopMove); // 对应原 sf_close
+
+        // --- 旧逻辑保留 (如果这些逻辑还没有移入 Controller 或属于纯计算) ---
+        // 本机高度、目标高度、目标信息计算 (原代码只有打印日志，暂且保留连接到原槽函数或忽略)
+        // connect(w, SIGNAL(sig_sf_local_altitude()), this, SLOT(sf_info_local_altitude())); 
+        // connect(w, SIGNAL(sig_sf_target_altitude()), this, SLOT(sf_info_target_altitude()));
+        // connect(w, SIGNAL(sig_target_info_all()), this, SLOT(sf_info_target_all()));
+
+        // --- 激光相关 (保持原样或走 AppConfig) ---
+        connect(w, SIGNAL(sigUpdateBj()), this, SLOT(updateBjFwFy()));
+        connect(this, &fzqjMain_user::sigUpdateSendBjFwFy, w, &fzqjSfMore::SFupdateBjFwFy);
+
+        // 激光禁区配置 (已重构为 AppConfig，这里做适配)
+        connect(this, &fzqjMain_user::sigSendLaserForbidPara, w, &fzqjSfMore::updateLaserForbid);
+        connect(w, &fzqjSfMore::sigAcquireLaserFobid, this, &fzqjMain_user::getLaserForbidPara);
+        connect(w, &fzqjSfMore::sigSetLaserForbid, this, &fzqjMain_user::setLaserForbidPara);
+
+        // 补偿设置 (保持原样)
+        connect(w, &fzqjSfMore::sigSFCompensateSet, this, &fzqjMain_user::setSfCompensate);
+
+        w->setAttribute(Qt::WA_DeleteOnClose, true);
+        w->show();
+    }
 }
 
 void fzqjMain_user::sf_biaojiao_X(void)
@@ -3685,14 +3519,11 @@ void fzqjMain_user::sf_insert(int num, int fw, int fy)
 
 void fzqjMain_user::on_btn_sf_insert_clicked(void)
 {
-	QString str = QStringLiteral("转台-设置预置位：%1").arg(ui.cbx_sf_yzw_num->currentText());
-	ShowLineText(0, 0, str);
-	m_xk_down_msg.msg_type = E_FK_SF_YZW_INSERT;
-	m_xk_down_msg.param_1 = ui.cbx_sf_yzw_num->currentIndex() + 1;
-	m_xk_down_msg.param_2 = m_pic_up_realtime_state.fw / 10;
-	m_xk_down_msg.param_3 = m_pic_up_realtime_state.fy / 10;
-	sendMsg2Pic();
-	m_xk_down_msg.msg_type = E_FK_BUTT;
+    QString str = QStringLiteral("转台-设置预置位：%1").arg(ui.cbx_sf_yzw_num->currentText());
+    ShowLineText(0, 0, str);
+    int index = ui.cbx_sf_yzw_num->currentIndex() + 1;
+    // 使用当前角度
+    m_gimbalController->setPreset(index, (int)(m_deviceStatus.azimuth * 1000), (int)(m_deviceStatus.pitch * 1000));
 }
 
 void fzqjMain_user::sf_toyzw(int num)
@@ -3705,12 +3536,9 @@ void fzqjMain_user::sf_toyzw(int num)
 
 void fzqjMain_user::on_btn_sf_toyzw_clicked(void)
 {
-	QString str = QStringLiteral("转台-运动-跳转到预置位：%1").arg(ui.cbx_sf_yzw_num->currentText());
-	ShowLineText(0, 0, str);
-	m_xk_down_msg.msg_type = E_FK_SF_YZW_TO;
-	m_xk_down_msg.param_1 = ui.cbx_sf_yzw_num->currentIndex() + 1;
-	sendMsg2Pic();
-	m_xk_down_msg.msg_type = E_FK_BUTT;
+    QString str = QStringLiteral("转台-运动-跳转到预置位：%1").arg(ui.cbx_sf_yzw_num->currentText());
+    ShowLineText(0, 0, str);
+    m_gimbalController->goToPreset(ui.cbx_sf_yzw_num->currentIndex() + 1);
 
 }
 
@@ -3736,10 +3564,7 @@ void fzqjMain_user::on_cbx_sf_yzw_num_editTextChanged(const QString&)
 
 void fzqjMain_user::sf_delete(int num)
 {
-	m_xk_down_msg.msg_type = E_FK_SF_YZW_DALETE;
-	m_xk_down_msg.param_1 = num;
-	sendMsg2Pic();
-	m_xk_down_msg.msg_type = E_FK_BUTT;
+	m_gimbalController->deletePreset(num);
 }
 
 void fzqjMain_user::sf_biaojiao_any(int fw, int fy)
@@ -3853,20 +3678,14 @@ void fzqjMain_user::on_toolButton_savePic_IR_clicked(void)
 
 void fzqjMain_user::on_toolButton_laser_ON_clicked(void)
 {
-	m_xk_down_msg.msg_type = E_FK_LASER_RANGING_OPEN;
-	sendMsg2Pic();
-	m_xk_down_msg.msg_type = E_FK_BUTT;
-	QString str = QStringLiteral("系统控制-激光测距上下电-开");
-	ShowLineText(0, 0, str);
+    m_laserController->setPower(true);
+    ShowLineText(0, 0, QStringLiteral("系统控制-激光测距上下电-开"));
 }
 
 void fzqjMain_user::on_toolButton_laser_OFF_clicked(void)
 {
-	m_xk_down_msg.msg_type = E_FK_LASER_RANGING_CLOSE;
-	sendMsg2Pic();
-	m_xk_down_msg.msg_type = E_FK_BUTT;
-	QString str = QStringLiteral("系统控制-激光测距上下电-关");
-	ShowLineText(0, 0, str);
+    m_laserController->setPower(false);
+    ShowLineText(0, 0, QStringLiteral("系统控制-激光测距上下电-关"));
 }
 
 

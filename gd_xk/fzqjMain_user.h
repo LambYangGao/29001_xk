@@ -18,7 +18,8 @@
 #include<qmovie.h>
 #include "DeviceStatus.h"
 #include "AppConfig.h"
-
+#include "LaserController.h"
+#include "GimbalController.h"
 
 
 class fzqjMain_user : public QWidget
@@ -48,6 +49,11 @@ private:
 
     DeviceStatus m_deviceStatus; // 业务对象，作为 UI 的数据源
 	AppConfig* m_appConfig; // AppConfig 成员
+    LaserController* m_laserController; // 激光控制器
+	GimbalController* m_gimbalController; // 云台控制器
+
+    bool m_isUI_LaserActive = false; // 记录测距是否开启 (用于 UI 闪烁判断)
+    int m_ui_laserAnimIndex = 0;     // 闪烁计数器
 
 	//视频网络地址
 	QString m_Video_ip = "192.168.0.100";
@@ -102,11 +108,7 @@ private:
 	float picLeftPraW = 1920.0;
 	float picRightPra = (float)1080 / (float)1920;
 
-	//激光测距
 	QTimer* m_timer1000 = nullptr;
-	bool m_bLaserDisStart = false;
-	int dis_start_index = 0;
-
 	QTimer* m_timer500 = nullptr;
 
 	bool b_yaogan_mainCamera = false; // false 可见光 true 红外
@@ -159,9 +161,6 @@ public:
 	void sendWatchMsg(void);
 	void sendHeartMsg2FK(void);//1hz
 	void sendDevStateMsg2FK(void);//1hz
-	void sendSFshache(void);
-	float degToRad(float deg);
-	float radToDeg(float rad);
 
 	void showVL(void);
 	void showIR(void);
@@ -174,14 +173,6 @@ public:
 
 	float calculateNewFocalLength(float currentFocalLength, int currentPixelCount, int desiredPixelCount);
 	void guideAutoFocus(void);
-	void calculateDeltaAngles(
-		double u_d, double v_d, // 鼠标点击位置在显示框中的坐标
-		double W_d, double H_d, // 显示框的宽高
-		double W, double H, // 相机分辨率
-		double fov_h, double fov_v, // 相机的水平和垂直视场角（度）
-		double theta_0, double phi_0, // 当前方位角和俯仰角（度）
-		double& deltaTheta, double& deltaPhi // 输出的跳转角度（度）
-	);
 
 	QThread* Vi_H24Decoder_Thread;
 	QThread* SDL_Play_vi_Thread;
@@ -225,11 +216,6 @@ private:
 	void SetBtnHighLight(QWidget* btn, bool flag);//设置按钮高亮
 	void SetMainCamera(bool flag);//false 可见光 true 红外
 	void SetDevDateTime(void);
-	int t_SF_Stop(void);
-	//判断是否在禁止区域内
-	bool isInNoZone(float current_azimuth, float current_elevation,
-		float az_start, float az_end,
-		float el_start, float el_end);
 	HEALTH_CTL_MSG getWatchDogMsg(int state);
 public slots:
 	void updateBjFwFy(void);
@@ -259,6 +245,7 @@ public slots:
 	void setLaserForbidPara(float fw_start, float fw_stop, float fy_start, float fy_stop);
 	void setSfCompensate(float fw_com, float fy_com);
 	void setWatchDog(int state);
+    void onLaserContinuousChanged(bool active); // 响应控制器状态
 protected slots:
 
 	
